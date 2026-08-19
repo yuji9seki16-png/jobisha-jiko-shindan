@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>浄美社 自己診断</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --brand: #1a1a1a;
+  --skill: #1a3c5e;
+  --stance: #2e6b4f;
+  --accent: #c0392b;
+  --bg: #f7f7f7;
+  --white: #fff;
+  --border: #ddd;
+  --text: #1a1a1a;
+  --muted: #888;
+}
+
+body {
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  background: var(--bg); color: var(--text);
+  font-size: 14px; line-height: 1.75;
+  min-height: 100vh;
+}
+
+/* ─── ヘッダー ─── */
+.app-header {
+  background: var(--brand); color: #fff;
+  padding: 16px 24px; position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.app-header h1 { font-size: 15px; font-weight: 700; }
+.app-header .step-indicator { font-size: 11px; color: #aaa; }
+
+/* ─── プログレスバー ─── */
+.progress-bar { height: 4px; background: #ddd; }
+.progress-fill { height: 100%; background: var(--brand); transition: width 0.3s; }
+
+/* ─── メインコンテナ ─── */
+.container { max-width: 680px; margin: 0 auto; padding: 32px 20px 64px; }
+
+/* ─── ステップ ─── */
+.step { display: none; }
+.step.active { display: block; }
+
+/* ─── カード ─── */
+.card {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 2px; padding: 24px; margin-bottom: 16px;
+}
+.card-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.card-desc { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+
+/* ─── フォーム ─── */
+.form-group { margin-bottom: 16px; }
+label.field-label { font-size: 12px; font-weight: 700; display: block; margin-bottom: 6px; }
+label.field-label span { color: var(--accent); }
+input[type="text"], select {
+  width: 100%; border: 1px solid var(--border); border-radius: 2px;
+  padding: 10px 12px; font-size: 14px; font-family: inherit;
+  background: #fff;
+}
+input[type="text"]:focus, select:focus {
+  outline: none; border-color: var(--brand);
+}
+
+/* ─── 設問カード ─── */
+.q-header {
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px;
+}
+.q-num {
+  min-width: 40px; height: 40px; background: var(--brand); color: #fff;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; flex-shrink: 0;
+}
+.q-cap {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 1px;
+  color: #fff; white-space: nowrap;
+}
+.q-cap.skill { background: var(--skill); }
+.q-cap.stance { background: var(--stance); }
+.q-text { font-size: 15px; font-weight: 700; line-height: 1.5; margin-top: 4px; }
+
+/* ラジオ */
+.radio-group {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 8px; margin-top: 16px;
+}
+.radio-opt { position: relative; }
+.radio-opt input { position: absolute; opacity: 0; }
+.radio-opt label {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 4px; border: 2px solid var(--border); border-radius: 2px;
+  cursor: pointer; text-align: center; transition: all 0.15s;
+  font-size: 11px; color: var(--muted);
+}
+.radio-opt label .score { font-size: 22px; font-weight: 700; color: var(--brand); line-height: 1.2; }
+.radio-opt input:checked + label {
+  border-color: var(--brand); background: var(--brand); color: #fff;
+}
+.radio-opt input:checked + label .score { color: #fff; }
+
+/* ─── 設問ナビ ─── */
+.q-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.q-counter { font-size: 12px; color: var(--muted); }
+
+/* ─── ボタン ─── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 12px 24px; font-size: 14px; font-weight: 700;
+  border: none; border-radius: 2px; cursor: pointer;
+  font-family: inherit; transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-secondary { background: #eee; color: var(--text); }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ─── 結果 ─── */
+.result-summary {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-bottom: 20px;
+}
+.rs-item { border: 1px solid var(--border); padding: 10px 12px; background: var(--white); }
+.rs-item .rs-lbl { font-size: 10px; color: var(--muted); }
+.rs-item .rs-val { font-size: 20px; font-weight: 700; }
+
+.result-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; }
+.result-table th, .result-table td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: middle; }
+.result-table th { background: var(--brand); color: #fff; font-size: 11px; text-align: center; }
+.result-table td.cap-name { font-weight: 700; }
+.result-table td.score-cell { text-align: center; font-weight: 700; font-size: 15px; }
+.result-table td.exp-cell { text-align: center; color: #555; }
+.result-table td.gap-cell { text-align: center; font-weight: 700; }
+.result-table td.judge-cell { text-align: center; font-weight: 700; }
+
+.j-exc { color: #1b5e20; }
+.j-ok  { color: #1565c0; }
+.j-grow { color: #e65100; }
+.j-focus { color: #b71c1c; }
+
+.skill-tag { font-size: 9px; font-weight: 700; padding: 1px 5px; color: #fff; border-radius: 1px; }
+.tag-skill { background: var(--skill); }
+.tag-stance { background: var(--stance); }
+
+.chart-wrap { background: var(--white); border: 1px solid var(--border); padding: 20px; margin-bottom: 16px; }
+.chart-wrap h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+canvas#radarChart { max-height: 380px; }
+
+/* コメント欄 */
+.comment-area {
+  background: var(--white); border: 1px solid var(--border);
+  padding: 16px; margin-bottom: 16px;
+}
+.comment-area label { font-size: 12px; font-weight: 700; display: block; margin-bottom: 8px; }
+.comment-box {
+  width: 100%; min-height: 80px; border: 1px solid var(--border);
+  padding: 10px; font-size: 13px; font-family: inherit;
+  border-radius: 2px; resize: vertical;
+}
+.comment-box:focus { outline: none; border-color: var(--brand); }
+
+/* 分析テキスト */
+.analysis-box {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
+}
+.analysis-item { border: 1px solid var(--border); padding: 14px; background: var(--white); }
+.analysis-item h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+.analysis-item p { font-size: 12px; color: #333; line-height: 1.7; }
+
+/* GAS送信ステータス */
+.send-status { font-size: 12px; margin-top: 8px; min-height: 20px; }
+.send-status.ok { color: #1b5e20; }
+.send-status.err { color: #b71c1c; }
+
+/* ─── 印刷 ─── */
+@media print {
+  body { background: #fff; }
+  .app-header, .progress-bar, .btn, .q-nav, #step1, #step2, #step3-nav, .send-area { display: none !important; }
+  .step { display: block !important; }
+  #step1, #step2 { display: none !important; }
+  #step3 { display: block !important; }
+  .container { padding: 0; max-width: none; }
+  .chart-wrap { page-break-inside: avoid; }
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  @page { size: A4 portrait; margin: 12mm 14mm; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>浄美社 自己診断</h1>
+  <span class="step-indicator" id="stepLabel">STEP 1 / 3</span>
+</header>
+<div class="progress-bar">
+  <div class="progress-fill" id="progressFill" style="width:0%"></div>
+</div>
+
+<div class="container">
+
+  <!-- ─── STEP 1: 基本情報 ─── -->
+  <div class="step active" id="step1">
+    <div class="card">
+      <div class="card-title">基本情報の入力</div>
+      <div class="card-desc">氏名・所属・自己認識ステージを入力してください。回答は記録されます。</div>
+
+      <div class="form-group">
+        <label class="field-label" for="inputName">氏名 <span>*</span></label>
+        <input type="text" id="inputName" placeholder="例：浄美 太郎">
+      </div>
+      <div class="form-group">
+        <label class="field-label" for="inputDept">所属 <span>*</span></label>
+        <input type="text" id="inputDept" placeholder="例：京都営業所">
+      </div>
+      <div class="form-group">
+        <label class="field-label" for="inputStage">自己認識ステージ <span>*</span></label>
+        <select id="inputStage">
+          <option value="">── 選択してください ──</option>
+          <option value="S1">S1（入社間もない・基礎を学ぶ段階）</option>
+          <option value="S2">S2（基本業務を一人でこなせる）</option>
+          <option value="S3">S3（応用・イレギュラー対応ができる）</option>
+          <option value="S4">S4（後輩へのサポートができる）</option>
+          <option value="S5">S5（チームの中核として機能する）</option>
+          <option value="S6">S6（部門・組織をリードする）</option>
+          <option value="S7">S7（経営・全社的な判断に関与する）</option>
+        </select>
+      </div>
+
+      <div style="margin-top:8px;padding:12px 16px;background:#f9f9f9;border-left:3px solid #1a1a1a;font-size:12px;color:#555;">
+        このあと24問の設問に正直に回答してください（10〜15分）。<br>
+        「完璧な回答」はありません。今の自分の状態を素直に選んでください。
+      </div>
+
+      <div style="margin-top:20px;text-align:right;">
+        <button class="btn btn-primary" onclick="goStep2()">診断を始める →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── STEP 2: 24問 ─── -->
+  <div class="step" id="step2">
+    <div class="card" id="questionCard">
+      <!-- JS で描画 -->
+    </div>
+    <div class="q-nav">
+      <button class="btn btn-secondary" onclick="prevQ()">← 前へ</button>
+      <span class="q-counter" id="qCounter">1 / 24</span>
+      <button class="btn btn-primary" id="nextBtn" onclick="nextQ()" style="visibility:hidden;">次へ →</button>
+    </div>
+  </div>
+
+  <!-- ─── STEP 3: 結果 ─── -->
+  <div class="step" id="step3">
+    <div id="resultHeader" class="card">
+      <div class="card-title" id="resultName"></div>
+      <div style="font-size:12px;color:var(--muted);" id="resultMeta"></div>
+    </div>
+
+    <!-- スコアサマリー -->
+    <div class="result-summary" id="resultSummary"></div>
+
+    <!-- レーダーチャート -->
+    <div class="chart-wrap">
+      <h3>強み・伸びしろ レーダーチャート</h3>
+      <canvas id="radarChart"></canvas>
+      <p style="font-size:10px;color:var(--muted);margin-top:8px;">青：あなたのスコア　灰：ステージ期待値</p>
+    </div>
+
+    <!-- 能力別テーブル -->
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="result-table">
+        <tr>
+          <th style="width:40px;">区分</th>
+          <th>能力</th>
+          <th style="width:70px;">スコア</th>
+          <th style="width:60px;">期待値</th>
+          <th style="width:60px;">ギャップ</th>
+          <th style="width:90px;">判定</th>
+        </tr>
+        <tbody id="resultTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 分析テキスト -->
+    <div class="analysis-box" id="analysisBox"></div>
+
+    <!-- 面談前メモ -->
+    <div class="comment-area">
+      <label for="commentBox">面談前の一言メモ（任意）</label>
+      <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
+    </div>
+
+    <div id="step3-nav" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="btn btn-secondary" onclick="window.print()">🖨 印刷 / PDF保存</button>
+      <button class="btn btn-accent" onclick="sendToGAS()">📤 結果を送信する</button>
+      <button class="btn btn-secondary" onclick="resetAll()">← はじめからやり直す</button>
+    </div>
+    <div class="send-status" id="sendStatus"></div>
+    <div id="managerUrlBox" style="display:none;margin-top:12px;background:#f0f4ff;border:1px solid #c0cfe8;border-radius:4px;padding:14px 16px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;">📋 上長評価URLを上長に共有してください</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="managerUrlText" type="text" readonly
+          style="flex:1;font-size:11px;font-family:monospace;background:#fff;border:1px solid #ccc;border-radius:3px;padding:6px 8px;color:#333;">
+        <button onclick="copyManagerUrl()"
+          style="white-space:nowrap;background:#1a1a1a;color:#fff;border:none;border-radius:3px;padding:6px 14px;font-size:12px;cursor:pointer;"
+          id="copyUrlBtn">コピー</button>
+      </div>
+    </div>
+    <div class="send-area" style="margin-top:8px;font-size:11px;color:#888;">
+      ※「結果を送信する」を押すと、氏名・所属・スコア・面談前メモが管理者のスプレッドシートに記録されます。
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ─────────────────────────────────────────
+// マスターデータ
+// ─────────────────────────────────────────
+
+const CAPABILITIES = [
+  { name: "① 全体を構造的に捉える力", short: "①全体把握", type: "スキル",
+    questions: [
+      "事実やデータをもとに、状況を客観的に把握できている",
+      "相手や現場の潜在的なニーズ・課題を捉えようとしている",
+      "時間軸（過去・現在・未来）で物事を整理して考えることができる",
+    ]},
+  { name: "② 決めて動く力", short: "②決めて動く", type: "スキル",
+    questions: [
+      "情報が揃っていなくても、自分で判断してまず動ける",
+      "決めたことにスピード感を持って取り組んでいる",
+      "優先順位を自分でつけて、重要なことから行動できている",
+    ]},
+  { name: "③ 仕事のプロセス設計力", short: "③プロセス", type: "スキル",
+    questions: [
+      "身の回りや段取りを整え、期日までにやり切る準備ができている",
+      "報告・連絡・相談のタイミングを適切に判断できている",
+      "うまくいかない時に進め方を柔軟に修正できている",
+    ]},
+  { name: "④ 人を動かす力（論理・感情）", short: "④人を動かす", type: "スキル",
+    questions: [
+      "自分の考えを相手に分かりやすく伝えられている",
+      "相手の気持ちや状況を理解した上でコミュニケーションできている",
+      "仲間や関係者が「動きたくなる」ような関わり方ができている",
+    ]},
+  { name: "⑤ 改善をし続ける姿勢（時間軸）", short: "⑤改善継続", type: "スタンス",
+    questions: [
+      "今のやり方に疑問を持ち、もっと良くできないか考えている",
+      "失敗や問題を隠さず、次への学びとして活かしている",
+      "自分の業務を超えて、全体をより良くする提案ができている",
+    ]},
+  { name: "⑥ 思いを巡らせる姿勢（他者軸）", short: "⑥他者軸", type: "スタンス",
+    questions: [
+      "相手の立場に立って、言葉や行動を選んでいる",
+      "関わる相手の困りごとや変化に気づこうとしている",
+      "お客様や現場スタッフと顔の見える関係を築き、その方々が喜ぶことは何かを日々意識して動いている",
+    ]},
+  { name: "⑦ はじめてに向き合う姿勢（浄美社らしさ）", short: "⑦はじめて", type: "スタンス",
+    questions: [
+      "前例がなくても、まずやってみる判断ができている",
+      "正解が分からない場面で、仮の案を出して前に進んでいる",
+      "失敗を恐れず「とりあえずやってみる」を選べている",
+    ]},
+  { name: "⑧ 圧倒的当事者意識（責任軸）", short: "⑧当事者", type: "スタンス",
+    questions: [
+      "体調管理を大前提として、任された仕事を「自分の仕事」として最後までやり切っている",
+      "チームや現場で起きていることを「自分ごと」として考えている",
+      "問題が起きた時、人のせいにせず自分が動こうとしている",
+    ]},
+];
+
+// 設問シャッフル順（cap_idx, q_idx）
+const QUESTION_ORDER = [
+  [4,0],[0,0],[5,0],[1,0],[6,0],[2,0],[7,0],[3,0],
+  [2,1],[6,1],[0,1],[4,1],[3,1],[7,1],[1,1],[5,1],
+  [5,2],[1,2],[7,2],[3,2],[0,2],[6,2],[2,2],[4,2],
+];
+
+// ステージ別期待スコア [①②③④⑤⑥⑦⑧]
+const STAGE_EXPECTED = {
+  S1: [1.5, 1.5, 2.0, 1.5, 2.0, 2.0, 2.5, 2.5],
+  S2: [2.0, 2.0, 2.5, 2.0, 2.5, 2.5, 2.5, 3.0],
+  S3: [2.5, 2.5, 3.0, 2.5, 3.0, 3.0, 3.0, 3.5],
+  S4: [3.0, 3.0, 3.5, 3.0, 3.0, 3.0, 3.0, 3.5],
+  S5: [3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5],
+  S6: [3.5, 4.0, 4.0, 4.0, 3.5, 3.5, 3.5, 4.0],
+  S7: [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0],
+};
+
+// GAS WebアプリURL（デプロイ後に設定）
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxusPu3t2K0ptCOaSf9MGZct5GV5o9EjXGKROAXh11ikgw12Mu0PubGqz3FLgAkFoo6Mg/exec";
+
+// ─────────────────────────────────────────
+// 状態管理
+// ─────────────────────────────────────────
+let currentStep = 1;
+let currentQ = 0;
+let answers = new Array(24).fill(null);
+let userName = "", userDept = "", userStage = "";
+let radarChart = null;
+let submitted = false;
+let isManagerMode = false;
+let targetName = "";
+let autoAdvanceTimer = null;
+
+// ─────────────────────────────────────────
+// STEP 1 → STEP 2
+// ─────────────────────────────────────────
+function goStep2() {
+  userName = document.getElementById("inputName").value.trim();
+  userDept = document.getElementById("inputDept").value.trim();
+  userStage = document.getElementById("inputStage").value;
+
+  if (!userName) { alert("氏名を入力してください"); return; }
+  if (!userDept)  { alert("所属を入力してください"); return; }
+  if (!userStage) { alert("ステージを選択してください"); return; }
+
+  showStep(2);
+  currentQ = 0;
+  renderQuestion();
+}
+
+// ─────────────────────────────────────────
+// 設問レンダリング
+// ─────────────────────────────────────────
+function renderQuestion() {
+  const [capIdx, qIdx] = QUESTION_ORDER[currentQ];
+  const cap = CAPABILITIES[capIdx];
+  const qText = cap.questions[qIdx];
+  const qNum = currentQ + 1;
+  const typeClass = cap.type === "スキル" ? "skill" : "stance";
+
+  const prevSelected = answers[currentQ];
+  const opts = [
+    { val: 1, label: "まだ<br>できていない" },
+    { val: 2, label: "ときどき<br>できている" },
+    { val: 3, label: "だいたい<br>できている" },
+    { val: 4, label: "いつも<br>できている" },
+  ];
+
+  let radioHTML = opts.map(o => `
+    <div class="radio-opt">
+      <input type="radio" name="qans" id="opt${o.val}" value="${o.val}"
+        ${prevSelected === o.val ? "checked" : ""} onchange="selectAnswer(${o.val})">
+      <label for="opt${o.val}">
+        <span class="score">${o.val}</span>
+        <span>${o.label}</span>
+      </label>
+    </div>`).join("");
+
+  document.getElementById("questionCard").innerHTML = `
+    <div class="q-header">
+      <div class="q-num">${qNum}</div>
+      <div style="flex:1;">
+        <div class="q-text">${qText}</div>
+      </div>
+    </div>
+    <div class="radio-group">${radioHTML}</div>
+  `;
+
+  document.getElementById("qCounter").textContent = `${qNum} / 24`;
+
+  // プログレス
+  const pct = Math.round((currentQ / 24) * 100);
+  document.getElementById("progressFill").style.width = pct + "%";
+  document.getElementById("stepLabel").textContent = `STEP 2 / 3 ─ ${qNum}/24問`;
+
+  // 次へボタン
+  const nextBtn = document.getElementById("nextBtn");
+  const isLast = currentQ === 23;
+  nextBtn.textContent = isLast ? "結果を見る ✓" : "次へ →";
+  nextBtn.disabled = answers[currentQ] === null;
+
+  // 前へボタン
+  document.querySelector(".q-nav .btn-secondary").disabled = currentQ === 0;
+}
+
+function selectAnswer(val) {
+  answers[currentQ] = val;
+  if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+  autoAdvanceTimer = setTimeout(() => { nextQ(); }, 350);
+}
+
+document.addEventListener("keydown", function(e) {
+  if (!document.getElementById("step2").classList.contains("active")) return;
+  if (e.key >= "1" && e.key <= "4") {
+    const val = parseInt(e.key);
+    answers[currentQ] = val;
+    const radio = document.querySelector(`input[name="qans"][value="${val}"]`);
+    if (radio) radio.checked = true;
+    if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = setTimeout(() => { nextQ(); }, 350);
+  }
+});
+
+function nextQ() {
+  if (answers[currentQ] === null) { alert("回答を選んでください"); return; }
+  if (currentQ < 23) {
+    currentQ++;
+    renderQuestion();
+  } else {
+    showResult();
+  }
+}
+
+function prevQ() {
+  if (autoAdvanceTimer) { clearTimeout(autoAdvanceTimer); autoAdvanceTimer = null; }
+  if (currentQ > 0) { currentQ--; renderQuestion(); }
+}
+
+// ─────────────────────────────────────────
+// 結果計算
+// ─────────────────────────────────────────
+function calcScores() {
+  // 各能力のスコア（3問平均）
+  const capAnswers = Array.from({length: 8}, () => []);
+  QUESTION_ORDER.forEach(([capIdx, _], i) => {
+    capAnswers[capIdx].push(answers[i]);
+  });
+  return capAnswers.map(arr => {
+    const sum = arr.reduce((a, b) => a + b, 0);
+    return Math.round((sum / arr.length) * 10) / 10;
+  });
+}
+
+function getJudge(gap) {
+  if (gap >= 0.5)  return { mark: "◎", label: "ステージ超え", cls: "j-exc" };
+  if (gap >= -0.4) return { mark: "○", label: "適正",       cls: "j-ok" };
+  if (gap >= -1.0) return { mark: "△", label: "伸びしろ",   cls: "j-grow" };
+  return              { mark: "▽", label: "重点育成",        cls: "j-focus" };
+}
+
+// ─────────────────────────────────────────
+// 結果表示
+// ─────────────────────────────────────────
+function showResult() {
+  showStep(3);
+  document.getElementById("progressFill").style.width = "100%";
+  document.getElementById("stepLabel").textContent = "STEP 3 / 3 ─ 結果";
+
+  const scores = calcScores();
+  const expected = STAGE_EXPECTED[userStage];
+  const gaps = scores.map((s, i) => Math.round((s - expected[i]) * 10) / 10);
+  const judges = gaps.map(g => getJudge(g));
+
+  // ヘッダー
+  document.getElementById("resultName").textContent = isManagerMode
+    ? `${targetName} さんへの上長評価（評価者：${userName}）`
+    : userName + " さんの自己診断結果";
+  document.getElementById("resultMeta").textContent =
+    `所属：${userDept}　ステージ：${userStage}　診断日：${new Date().toLocaleDateString("ja-JP")}`;
+
+  // スコアサマリー（◎個数・○・△・▽）
+  const cnt = { "◎": 0, "○": 0, "△": 0, "▽": 0 };
+  judges.forEach(j => cnt[j.mark]++);
+  const avgScore = Math.round(scores.reduce((a, b) => a + b) / 8 * 10) / 10;
+
+  document.getElementById("resultSummary").innerHTML = `
+    <div class="rs-item"><div class="rs-lbl">平均スコア</div><div class="rs-val j-ok">${avgScore}</div></div>
+    <div class="rs-item"><div class="rs-lbl">◎ ステージ超え</div><div class="rs-val j-exc">${cnt["◎"]}能力</div></div>
+    <div class="rs-item"><div class="rs-lbl">△ 伸びしろ</div><div class="rs-val j-grow">${cnt["△"]}能力</div></div>
+    <div class="rs-item"><div class="rs-lbl">▽ 重点育成</div><div class="rs-val j-focus">${cnt["▽"]}能力</div></div>
+  `;
+
+  // レーダーチャート
+  if (radarChart) { radarChart.destroy(); }
+  const labels = CAPABILITIES.map(c => c.short);
+  const ctx = document.getElementById("radarChart").getContext("2d");
+  radarChart = new Chart(ctx, {
+    type: "radar",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: isManagerMode ? `上長評価（${userName}）` : "あなたのスコア",
+          data: scores,
+          backgroundColor: isManagerMode ? "rgba(192, 57, 43, 0.15)" : "rgba(26, 60, 94, 0.15)",
+          borderColor: isManagerMode ? "#c0392b" : "#1a3c5e",
+          borderWidth: 2,
+          pointBackgroundColor: isManagerMode ? "#c0392b" : "#1a3c5e",
+          pointRadius: 4,
+        },
+        {
+          label: `${userStage} 期待値`,
+          data: expected,
+          backgroundColor: "rgba(150,150,150,0.08)",
+          borderColor: "#999",
+          borderWidth: 1.5,
+          borderDash: [4, 4],
+          pointBackgroundColor: "#999",
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        r: {
+          min: 0, max: 4,
+          ticks: { stepSize: 1, font: { size: 11 } },
+          pointLabels: { font: { size: 11, weight: "bold" } },
+        },
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 11 } } },
+      },
+    },
+  });
+
+  // テーブル
+  let tableHTML = "";
+  CAPABILITIES.forEach((cap, i) => {
+    const j = judges[i];
+    const gapStr = (gaps[i] >= 0 ? "+" : "") + gaps[i].toFixed(1);
+    const typeTag = cap.type === "スキル"
+      ? `<span class="skill-tag tag-skill">スキル</span>`
+      : `<span class="skill-tag tag-stance">スタンス</span>`;
+    tableHTML += `
+      <tr>
+        <td style="text-align:center;">${typeTag}</td>
+        <td class="cap-name" style="font-size:12px;">${cap.name}</td>
+        <td class="score-cell">${scores[i].toFixed(1)}</td>
+        <td class="exp-cell">${expected[i].toFixed(1)}</td>
+        <td class="gap-cell ${j.cls}">${gapStr}</td>
+        <td class="judge-cell ${j.cls}">${j.mark} ${j.label}</td>
+      </tr>`;
+  });
+  document.getElementById("resultTableBody").innerHTML = tableHTML;
+
+  // 分析テキスト
+  const excCaps = CAPABILITIES.filter((_, i) => judges[i].mark === "◎").map(c => c.name);
+  const focusCaps = CAPABILITIES.filter((_, i) => ["△","▽"].includes(judges[i].mark)).map(c => c.name);
+
+  const strengthText = excCaps.length > 0
+    ? excCaps.map(n => `・${n}`).join("<br>")
+    : "ステージに対してバランスよく発揮できています";
+
+  const growthText = focusCaps.length > 0
+    ? focusCaps.map(n => `・${n}`).join("<br>")
+    : "現在のステージに対して適正な水準です";
+
+  document.getElementById("analysisBox").innerHTML = `
+    <div class="analysis-item">
+      <h4>◎ あなたの強み仮説</h4>
+      <p>${strengthText}</p>
+    </div>
+    <div class="analysis-item">
+      <h4>△▽ 成長の余白</h4>
+      <p>${growthText}</p>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────
+// GAS送信
+// ─────────────────────────────────────────
+function lockSendButton() {
+  const btn = document.querySelector("#step3-nav .btn-accent") ||
+              document.querySelector("button[onclick='sendToGAS()']");
+  if (btn) { btn.disabled = true; btn.textContent = "✓ 送信済み"; }
+}
+
+function sendToGAS() {
+  if (submitted) return;  // 二重送信防止
+
+  const statusEl = document.getElementById("sendStatus");
+  statusEl.className = "send-status";
+  statusEl.textContent = "送信中…";
+
+  const scores = calcScores();
+  const expected = STAGE_EXPECTED[userStage];
+  const gaps = scores.map((s, i) => Math.round((s - expected[i]) * 10) / 10);
+  const judges = gaps.map(g => getJudge(g));
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    name: userName,
+    dept: userDept,
+    stage: userStage,
+    comment: document.getElementById("commentBox").value,
+    scores: scores,
+    expected: expected,
+    gaps: gaps,
+    judges: judges.map(j => j.mark + j.label),
+    type: isManagerMode ? "manager" : "self",
+    target_name: isManagerMode ? targetName : "",
+    manager_url: isManagerMode ? "" : buildManagerUrl(userName, userStage),
+  };
+
+  // GAS_URLが設定前の場合はデモメッセージ
+  if (GAS_URL.includes("YOUR_GAS_DEPLOYMENT_ID")) {
+    setTimeout(() => {
+      submitted = true; lockSendButton();
+      statusEl.className = "send-status ok";
+      statusEl.textContent = "✓ （デモモード）送信データを確認しました。実運用時はGAS URLを設定してください。";
+      console.log("送信データ:", JSON.stringify(payload, null, 2));
+    }, 800);
+    return;
+  }
+
+  fetch(GAS_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  .then(() => {
+    submitted = true; lockSendButton();
+    if (isManagerMode) {
+      statusEl.className = "send-status ok";
+      statusEl.textContent = "✓ 上長評価を送信しました。自己評価データを検索中…";
+      fetchSelfScoreAndOverlay(scores);
+    } else {
+      statusEl.className = "send-status ok";
+      statusEl.textContent = "✓ 結果を送信しました。管理者スプレッドシートに記録されました。";
+      showManagerUrlBox();
+    }
+  })
+  .catch(() => {
+    submitted = false;  // 送信失敗時はフラグを戻す（リトライ可能に）
+    statusEl.className = "send-status err";
+    statusEl.textContent = "送信に失敗しました。ネットワーク接続を確認してください。";
+  });
+}
+
+// ─────────────────────────────────────────
+// ユーティリティ
+// ─────────────────────────────────────────
+function showStep(n) {
+  currentStep = n;
+  document.querySelectorAll(".step").forEach(el => el.classList.remove("active"));
+  document.getElementById("step" + n).classList.add("active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function resetAll() {
+  if (!confirm("最初からやり直しますか？")) return;
+  answers = new Array(24).fill(null);
+  currentQ = 0;
+  userName = ""; userDept = ""; userStage = "";
+  submitted = false;
+  document.getElementById("inputName").value = "";
+  document.getElementById("inputDept").value = "";
+  document.getElementById("inputStage").value = "";
+  document.getElementById("sendStatus").textContent = "";
+  document.getElementById("progressFill").style.width = "0%";
+  document.getElementById("stepLabel").textContent = "STEP 1 / 3";
+  showStep(1);
+}
+
+// ─────────────────────────────────────────
+// URLパラメータ初期化（機能1：ステージ固定）
+// ─────────────────────────────────────────
+function initFromURL() {
+  const p = new URLSearchParams(window.location.search);
+  isManagerMode = p.get("mode") === "manager";
+  targetName    = p.get("target") || "";
+
+  if (p.get("name"))  document.getElementById("inputName").value  = p.get("name");
+  if (p.get("dept"))  document.getElementById("inputDept").value  = p.get("dept");
+  if (p.get("stage")) document.getElementById("inputStage").value = p.get("stage");
+
+  const lockName  = !!p.get("name");
+  const lockDept  = !!p.get("dept");
+  const lockStage = !!p.get("stage") || isManagerMode;
+
+  if (lockName || lockDept || lockStage) applyLockUI(lockName, lockDept, lockStage);
+
+  if (isManagerMode) {
+    document.querySelector("#step1 .card-title").textContent = "上長評価モード";
+    document.querySelector("#step1 .card-desc").textContent =
+      `「${targetName}」さんへの評価です。あなた自身の氏名と所属を入力してください。`;
+    document.getElementById("inputName").placeholder = "例：浄美 花子（評価者）";
+  }
+}
+
+function applyLockUI(lockName, lockDept, lockStage) {
+  const lockStyle = "background:#f0f0f0;color:#555;border-color:#ccc;pointer-events:none;";
+  const badge = '<span style="font-size:10px;background:#1a1a1a;color:#fff;padding:1px 6px;border-radius:1px;margin-left:6px;">会社設定</span>';
+  if (lockName) {
+    const el = document.getElementById("inputName");
+    el.setAttribute("readonly", true); el.style.cssText = lockStyle;
+    document.querySelector("label[for='inputName']").insertAdjacentHTML("beforeend", badge);
+  }
+  if (lockDept) {
+    const el = document.getElementById("inputDept");
+    el.setAttribute("readonly", true); el.style.cssText = lockStyle;
+    document.querySelector("label[for='inputDept']").insertAdjacentHTML("beforeend", badge);
+  }
+  if (lockStage) {
+    const el = document.getElementById("inputStage");
+    el.setAttribute("disabled", true); el.style.cssText = lockStyle;
+    document.querySelector("label[for='inputStage']").insertAdjacentHTML("beforeend", badge);
+  }
+}
+
+// ─────────────────────────────────────────
+// 上長評価：自己評価データ取得・チャート重ね表示（機能2）
+// ─────────────────────────────────────────
+function fetchSelfScoreAndOverlay(managerScores) {
+  const statusEl = document.getElementById("sendStatus");
+  const cbName = "gasCallback_" + Date.now();
+
+  const timer = setTimeout(() => {
+    window[cbName] = null;
+    statusEl.textContent = "✓ 上長評価を送信しました（本人の自己評価は当日分が見つかりませんでした）。";
+  }, 8000);
+
+  window[cbName] = function(result) {
+    clearTimeout(timer);
+    window[cbName] = null;
+    document.getElementById("jsonpScript")?.remove();
+    if (result.status === "ok") {
+      overlayManagerChart(managerScores, result.scores, result.stage);
+      statusEl.textContent = `✓ 上長評価を送信しました。「${targetName}」さんの自己評価（${result.stage}）と重ね表示しています。`;
+    } else {
+      statusEl.textContent = "✓ 上長評価を送信しました（本人の自己評価は当日分が見つかりませんでした）。";
+    }
+  };
+
+  const url = `${GAS_URL}?action=getSelfScore&target=${encodeURIComponent(targetName)}&callback=${cbName}`;
+  const script = document.createElement("script");
+  script.id = "jsonpScript"; script.src = url;
+  document.body.appendChild(script);
+}
+
+function overlayManagerChart(managerScores, selfScores, selfStage) {
+  const labels = CAPABILITIES.map(c => c.short);
+  radarChart.data.datasets = [
+    {
+      label: `自己評価（${targetName}）`,
+      data: selfScores,
+      backgroundColor: "rgba(26, 60, 94, 0.12)",
+      borderColor: "#1a3c5e", borderWidth: 2.5,
+      pointBackgroundColor: "#1a3c5e", pointRadius: 4,
+    },
+    {
+      label: `上長評価（${userName}）`,
+      data: managerScores,
+      backgroundColor: "rgba(192, 57, 43, 0.12)",
+      borderColor: "#c0392b", borderWidth: 2.5,
+      pointBackgroundColor: "#c0392b", pointRadius: 4,
+    },
+    {
+      label: `${selfStage} 期待値`,
+      data: STAGE_EXPECTED[selfStage],
+      backgroundColor: "rgba(150,150,150,0.05)",
+      borderColor: "#bbb", borderWidth: 1.5,
+      borderDash: [4,4],
+      pointBackgroundColor: "#bbb", pointRadius: 3,
+    },
+  ];
+  radarChart.update();
+  const legendEl = document.querySelector(".chart-legend");
+  if (legendEl) legendEl.textContent = "青：本人の自己評価　赤：上長評価　灰：ステージ期待値";
+}
+
+function buildManagerUrl(name, stage) {
+  const base = window.location.origin + window.location.pathname;
+  return `${base}?mode=manager&target=${encodeURIComponent(name)}&stage=${stage}`;
+}
+
+function showManagerUrlBox() {
+  const url = buildManagerUrl(userName, userStage);
+  document.getElementById("managerUrlText").value = url;
+  document.getElementById("managerUrlBox").style.display = "block";
+}
+
+function copyManagerUrl() {
+  const input = document.getElementById("managerUrlText");
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.getElementById("copyUrlBtn");
+    btn.textContent = "✓ コピーしました";
+    setTimeout(() => { btn.textContent = "コピー"; }, 2000);
+  });
+}
+
+// 初期化
+initFromURL();
+</script>
+</body>
+</html>
