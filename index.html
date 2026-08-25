@@ -408,6 +408,8 @@ let submitted = false;
 let isManagerMode = false;
 let targetName = "";
 let autoAdvanceTimer = null;
+let selfToken = "";  // 自己評価送信時に発行する認証トークン（上長評価URLに埋め込む）
+let urlToken = "";   // 上長評価モードでURLから受け取ったトークン
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -678,6 +680,13 @@ function sendToGAS() {
   const gaps = scores.map((s, i) => Math.round((s - expected[i]) * 10) / 10);
   const judges = gaps.map(g => getJudge(g));
 
+  if (!isManagerMode) {
+    // 自己評価の送信ごとに新しい認証トークンを発行する（他人からの推測を防ぐ）
+    selfToken = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
   const payload = {
     timestamp: new Date().toISOString(),
     name: userName,
@@ -690,7 +699,8 @@ function sendToGAS() {
     judges: judges.map(j => j.mark + j.label),
     type: isManagerMode ? "manager" : "self",
     target_name: isManagerMode ? targetName : "",
-    manager_url: isManagerMode ? "" : buildManagerUrl(userName, userStage),
+    token: isManagerMode ? urlToken : selfToken,
+    manager_url: isManagerMode ? "" : buildManagerUrl(selfToken, userName, userStage),
   };
 
   // GAS_URLが設定前の場合はデモメッセージ
@@ -760,7 +770,8 @@ function resetAll() {
 function initFromURL() {
   const p = new URLSearchParams(window.location.search);
   isManagerMode = p.get("mode") === "manager";
-  targetName    = p.get("target") || "";
+  targetName    = p.get("target") || "";  // 表示用のみ。データ取得・検証には使わない
+  urlToken      = p.get("token") || "";   // 実際の認証はこちら
 
   if (p.get("name"))  document.getElementById("inputName").value  = p.get("name");
   if (p.get("dept"))  document.getElementById("inputDept").value  = p.get("dept");
@@ -824,7 +835,7 @@ function fetchSelfScoreAndOverlay(managerScores) {
     }
   };
 
-  const url = `${GAS_URL}?action=getSelfScore&target=${encodeURIComponent(targetName)}&callback=${cbName}`;
+  const url = `${GAS_URL}?action=getSelfScore&token=${encodeURIComponent(urlToken)}&callback=${cbName}`;
   const script = document.createElement("script");
   script.id = "jsonpScript"; script.src = url;
   document.body.appendChild(script);
@@ -861,13 +872,14 @@ function overlayManagerChart(managerScores, selfScores, selfStage) {
   if (legendEl) legendEl.textContent = "青：本人の自己評価　赤：上長評価　灰：ステージ期待値";
 }
 
-function buildManagerUrl(name, stage) {
+function buildManagerUrl(token, name, stage) {
   const base = window.location.origin + window.location.pathname;
-  return `${base}?mode=manager&target=${encodeURIComponent(name)}&stage=${stage}`;
+  // target=氏名 は画面表示用の飾り。実際の認証・データ取得は token で行う
+  return `${base}?mode=manager&token=${encodeURIComponent(token)}&target=${encodeURIComponent(name)}&stage=${stage}`;
 }
 
 function showManagerUrlBox() {
-  const url = buildManagerUrl(userName, userStage);
+  const url = buildManagerUrl(selfToken, userName, userStage);
   document.getElementById("managerUrlText").value = url;
   document.getElementById("managerUrlBox").style.display = "block";
 }
