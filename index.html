@@ -123,8 +123,7 @@ input[type="text"]:focus, select:focus {
 
 /* ─── 結果 ─── */
 .result-summary {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-  margin-bottom: 20px;
+  display: flex; margin-bottom: 20px;
 }
 .rs-item { border: 1px solid var(--border); padding: 10px 12px; background: var(--white); }
 .rs-item .rs-lbl { font-size: 10px; color: var(--muted); }
@@ -555,15 +554,11 @@ function showResult() {
     ? `評価者所属：${userDept}　診断日：${new Date().toLocaleDateString("ja-JP")}`
     : `所属：${userDept}　診断日：${new Date().toLocaleDateString("ja-JP")}`;
 
-  // スコアサマリー
+  // スコアサマリー（上長評価との比較は overlayManagerChart 側で差分平均を追加する）
   const avgScore = Math.round(scores.reduce((a, b) => a + b) / 8 * 10) / 10;
-  const maxScore = Math.max(...scores);
-  const minScore = Math.min(...scores);
 
   document.getElementById("resultSummary").innerHTML = `
     <div class="rs-item"><div class="rs-lbl">平均スコア</div><div class="rs-val j-ok">${avgScore}</div></div>
-    <div class="rs-item"><div class="rs-lbl">最も高いスコア</div><div class="rs-val j-exc">${maxScore.toFixed(1)}</div></div>
-    <div class="rs-item"><div class="rs-lbl">最も低いスコア</div><div class="rs-val j-focus">${minScore.toFixed(1)}</div></div>
   `;
 
   // レーダーチャート
@@ -852,7 +847,13 @@ function overlayManagerChart(managerScores, selfScores) {
     diff: Math.abs(selfScores[i] - managerScores[i]),
   }));
 
-  // 能力別テーブルを「自己評価／上長評価／話す手がかり」の比較表に差し替え
+  // 差分平均＝自己認識と他者評価のズレの大きさ（小さいほど客観視できている目安）
+  const avgDiff = Math.round(diffs.reduce((sum, d) => sum + d.diff, 0) / diffs.length * 10) / 10;
+  document.getElementById("resultSummary").insertAdjacentHTML("beforeend", `
+    <div class="rs-item"><div class="rs-lbl">差分平均</div><div class="rs-val">${avgDiff.toFixed(1)}</div></div>
+  `);
+
+  // 能力別テーブルを「自己評価／上長評価／すり合わせポイント」の比較表に差し替え
   document.getElementById("resultTableHead").innerHTML = `
     <th style="width:40px;">区分</th>
     <th>能力</th>
