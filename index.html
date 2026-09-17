@@ -656,6 +656,7 @@ function sendToGAS() {
     dept: userDept,
     comment: document.getElementById("commentBox").value,
     scores: scores,
+    judges: new Array(8).fill(""), // スプレッドシートの列位置合わせ用（判定機能は廃止済み・表示なし）
     type: isManagerMode ? "manager" : "self",
     target_name: isManagerMode ? targetName : "",
     token: isManagerMode ? urlToken : selfToken,
