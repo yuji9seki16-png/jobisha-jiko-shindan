@@ -138,6 +138,11 @@ input[type="text"]:focus, select:focus {
 .result-table td.exp-cell { text-align: center; color: #555; }
 .result-table td.gap-cell { text-align: center; font-weight: 700; }
 .result-table td.judge-cell { text-align: center; font-weight: 700; }
+.result-table tr.diff-highlight td { background: #f2f2f2; }
+.result-table td.diff-cell { text-align: center; }
+.result-table td.diff-cell .diff-num { font-weight: 700; font-size: 14px; }
+.result-table td.diff-cell .diff-label { display: block; font-size: 10px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.compare-note { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
 
 .j-exc { color: #1b5e20; }
 .j-ok  { color: #1565c0; }
@@ -274,6 +279,7 @@ canvas#radarChart { max-height: 380px; }
     </div>
 
     <!-- 能力別テーブル -->
+    <p id="compareNote" class="compare-note" style="display:none;">この表は評価ではなく、話す順番を決めるためのものです。</p>
     <div class="card" style="padding:0;overflow:hidden;">
       <table class="result-table">
         <tr id="resultTableHead">
@@ -595,6 +601,7 @@ function showResult() {
     <th>能力</th>
     <th style="width:70px;">スコア</th>
   `;
+  document.getElementById("compareNote").style.display = "none";
   let tableHTML = "";
   CAPABILITIES.forEach((cap, i) => {
     const typeTag = cap.type === "スキル"
@@ -831,28 +838,30 @@ function overlayManagerChart(managerScores, selfScores) {
   const mostAligned = diffs.reduce((a, b) => (b.diff < a.diff ? b : a));
   const mostGap = diffs.reduce((a, b) => (b.diff > a.diff ? b : a));
 
-  // 能力別テーブルを「自己評価／上長評価／差分」の比較表に差し替え
+  // 能力別テーブルを「自己評価／上長評価／話す手がかり」の比較表に差し替え
   document.getElementById("resultTableHead").innerHTML = `
     <th style="width:40px;">区分</th>
     <th>能力</th>
     <th style="width:60px;">自己評価</th>
     <th style="width:60px;">上長評価</th>
-    <th style="width:50px;">差分</th>
+    <th style="width:80px;">話す手がかり</th>
   `;
+  document.getElementById("compareNote").style.display = "block";
   let compareHTML = "";
   diffs.forEach((d, i) => {
     const cap = CAPABILITIES[i];
     const typeTag = cap.type === "スキル"
       ? `<span class="skill-tag tag-skill">スキル</span>`
       : `<span class="skill-tag tag-stance">スタンス</span>`;
-    const diffCell = d.diff === 0 ? "0.0" : d.diff.toFixed(1);
+    const dirLabel = d.diff === 0 ? "ほぼ一致" : (d.self > d.manager ? "自己が高め" : "上長が高め");
+    const rowClass = d.diff >= 1.0 ? ' class="diff-highlight"' : "";
     compareHTML += `
-      <tr>
+      <tr${rowClass}>
         <td style="text-align:center;">${typeTag}</td>
         <td class="cap-name" style="font-size:12px;">${cap.name}</td>
         <td class="score-cell">${d.self.toFixed(1)}</td>
         <td class="score-cell">${d.manager.toFixed(1)}</td>
-        <td class="score-cell">${diffCell}</td>
+        <td class="diff-cell"><span class="diff-num">${d.diff.toFixed(1)}</span><span class="diff-label">${dirLabel}</span></td>
       </tr>`;
   });
   document.getElementById("resultTableBody").innerHTML = compareHTML;
