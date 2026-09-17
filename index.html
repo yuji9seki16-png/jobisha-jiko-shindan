@@ -177,6 +177,14 @@ canvas#radarChart { max-height: 380px; }
 .analysis-item { border: 1px solid var(--border); padding: 14px; background: var(--white); }
 .analysis-item h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
 .analysis-item p { font-size: 12px; color: #333; line-height: 1.7; }
+.compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.compare-col { border-left: 3px solid; padding: 4px 0 4px 10px; }
+.compare-col-manager { border-color: #c0392b; }
+.compare-col-self { border-color: #1a3c5e; }
+.compare-col-label { font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.compare-col-manager .compare-col-label { color: #c0392b; }
+.compare-col-self .compare-col-label { color: #1a3c5e; }
+.compare-col p { font-size: 12px; color: #333; line-height: 1.6; }
 
 /* GAS送信ステータス */
 .send-status { font-size: 12px; margin-top: 8px; min-height: 20px; }
@@ -239,7 +247,7 @@ canvas#radarChart { max-height: 380px; }
 
       <div id="step1Error" class="field-error" style="display:none;"></div>
 
-      <div style="margin-top:8px;padding:12px 16px;background:#f9f9f9;border-left:3px solid #1a1a1a;font-size:12px;color:#555;">
+      <div id="selfNoteBox" style="margin-top:8px;padding:12px 16px;background:#f9f9f9;border-left:3px solid #1a1a1a;font-size:12px;color:#555;">
         このあと24問の設問に正直に回答してください（10〜15分）。<br>
         「完璧な回答」はありません。今の自分の状態を素直に選んでください。
       </div>
@@ -768,6 +776,7 @@ function initFromURL() {
       cautionBox.textContent = `※「${targetName}」さんについての評価です。該当する方について率直に回答してください。`;
       cautionBox.style.display = "block";
     }
+    document.getElementById("selfNoteBox").style.display = "none";
   }
 }
 
@@ -849,7 +858,7 @@ function overlayManagerChart(managerScores, selfScores) {
     <th>能力</th>
     <th style="width:60px;">自己評価</th>
     <th style="width:60px;">上長評価</th>
-    <th style="width:80px;">話す手がかり</th>
+    <th style="width:80px;">すり合わせポイント</th>
   `;
   document.getElementById("compareNote").style.display = "block";
   let compareHTML = "";
@@ -871,10 +880,13 @@ function overlayManagerChart(managerScores, selfScores) {
   });
   document.getElementById("resultTableBody").innerHTML = compareHTML;
 
-  // 既存の「強み仮説／成長の余白」は上長評価ベースなので見出しを明示し、
-  // 自己評価ベースの強み・弱みを並べて追加する
-  document.getElementById("strengthHeading").textContent = "強み仮説（上長評価・上位2つ）";
-  document.getElementById("growthHeading").textContent = "成長の余白（上長評価・下位2つ）";
+  // 「強み仮説／成長の余白」を上長評価・自己評価の2列で並べ、すり合わせしやすくする
+  const managerRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: managerScores[i] }))
+    .sort((a, b) => b.score - a.score);
+  const managerStrengthText = managerRanked.slice(0, 2)
+    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+  const managerGrowthText = managerRanked.slice(-2).reverse()
+    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
 
   const selfRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: selfScores[i] }))
     .sort((a, b) => b.score - a.score);
@@ -883,16 +895,34 @@ function overlayManagerChart(managerScores, selfScores) {
   const selfGrowthText = selfRanked.slice(-2).reverse()
     .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
 
-  document.getElementById("analysisBox").insertAdjacentHTML("beforeend", `
+  document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
-      <h4>強み仮説（自己評価・上位2つ）</h4>
-      <p>${selfStrengthText}</p>
+      <h4>強み仮説（上位2つ）</h4>
+      <div class="compare-cols">
+        <div class="compare-col compare-col-manager">
+          <div class="compare-col-label">上長評価</div>
+          <p>${managerStrengthText}</p>
+        </div>
+        <div class="compare-col compare-col-self">
+          <div class="compare-col-label">自己評価</div>
+          <p>${selfStrengthText}</p>
+        </div>
+      </div>
     </div>
     <div class="analysis-item">
-      <h4>成長の余白（自己評価・下位2つ）</h4>
-      <p>${selfGrowthText}</p>
+      <h4>成長の余白（下位2つ）</h4>
+      <div class="compare-cols">
+        <div class="compare-col compare-col-manager">
+          <div class="compare-col-label">上長評価</div>
+          <p>${managerGrowthText}</p>
+        </div>
+        <div class="compare-col compare-col-self">
+          <div class="compare-col-label">自己評価</div>
+          <p>${selfGrowthText}</p>
+        </div>
+      </div>
     </div>
-  `);
+  `;
 }
 
 function buildManagerUrl(token, name) {
