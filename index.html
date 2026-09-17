@@ -226,6 +226,7 @@ canvas#radarChart { max-height: 380px; }
     <div class="card">
       <div class="card-title">基本情報の入力</div>
       <div class="card-desc">氏名・所属・自己認識ステージを入力してください。回答は記録されます。</div>
+      <div id="managerCautionBox" style="display:none;margin-bottom:16px;padding:12px 16px;background:#fdecea;border-left:3px solid var(--accent);font-size:12px;color:#555;font-weight:700;"></div>
 
       <div class="form-group">
         <label class="field-label" for="inputName">氏名 <span>*</span></label>
@@ -627,11 +628,11 @@ function showResult() {
 
   document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
-      <h4>強み仮説（スコア上位2つ）</h4>
+      <h4 id="strengthHeading">強み仮説（スコア上位2つ）</h4>
       <p>${strengthText}</p>
     </div>
     <div class="analysis-item">
-      <h4>成長の余白（スコア下位2つ）</h4>
+      <h4 id="growthHeading">成長の余白（スコア下位2つ）</h4>
       <p>${growthText}</p>
     </div>
   `;
@@ -755,11 +756,18 @@ function initFromURL() {
   if (lockName || lockDept) applyLockUI(lockName, lockDept);
 
   if (isManagerMode) {
-    document.getElementById("appTitle").textContent = "浄美社 上長評価";
+    document.getElementById("appTitle").textContent = targetName
+      ? `${targetName} さんへの上長評価`
+      : "浄美社 上長評価";
     document.querySelector("#step1 .card-title").textContent = "上長評価モード";
     document.querySelector("#step1 .card-desc").textContent =
       `「${targetName}」さんへの評価です。あなた自身の氏名と所属を入力してください。`;
     document.getElementById("inputName").placeholder = "例：浄美 花子（評価者）";
+    if (targetName) {
+      const cautionBox = document.getElementById("managerCautionBox");
+      cautionBox.textContent = `※「${targetName}」さんについての評価です。該当する方について率直に回答してください。`;
+      cautionBox.style.display = "block";
+    }
   }
 }
 
@@ -828,15 +836,12 @@ function overlayManagerChart(managerScores, selfScores) {
   radarChart.update();
   document.querySelector(".chart-legend").textContent = "青：本人の自己評価　赤：上長評価";
 
-  // 認識の一致・ズレが大きい項目を特定
   const diffs = CAPABILITIES.map((cap, i) => ({
     name: cap.name,
     self: selfScores[i],
     manager: managerScores[i],
     diff: Math.abs(selfScores[i] - managerScores[i]),
   }));
-  const mostAligned = diffs.reduce((a, b) => (b.diff < a.diff ? b : a));
-  const mostGap = diffs.reduce((a, b) => (b.diff > a.diff ? b : a));
 
   // 能力別テーブルを「自己評価／上長評価／話す手がかり」の比較表に差し替え
   document.getElementById("resultTableHead").innerHTML = `
@@ -866,14 +871,26 @@ function overlayManagerChart(managerScores, selfScores) {
   });
   document.getElementById("resultTableBody").innerHTML = compareHTML;
 
+  // 既存の「強み仮説／成長の余白」は上長評価ベースなので見出しを明示し、
+  // 自己評価ベースの強み・弱みを並べて追加する
+  document.getElementById("strengthHeading").textContent = "強み仮説（上長評価・上位2つ）";
+  document.getElementById("growthHeading").textContent = "成長の余白（上長評価・下位2つ）";
+
+  const selfRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: selfScores[i] }))
+    .sort((a, b) => b.score - a.score);
+  const selfStrengthText = selfRanked.slice(0, 2)
+    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+  const selfGrowthText = selfRanked.slice(-2).reverse()
+    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+
   document.getElementById("analysisBox").insertAdjacentHTML("beforeend", `
     <div class="analysis-item">
-      <h4>認識が一致している項目</h4>
-      <p>・${mostAligned.name}（自己評価 ${mostAligned.self.toFixed(1)} / 上長評価 ${mostAligned.manager.toFixed(1)}）</p>
+      <h4>強み仮説（自己評価・上位2つ）</h4>
+      <p>${selfStrengthText}</p>
     </div>
     <div class="analysis-item">
-      <h4>認識のズレが大きい項目</h4>
-      <p>・${mostGap.name}（自己評価 ${mostGap.self.toFixed(1)} / 上長評価 ${mostGap.manager.toFixed(1)}）</p>
+      <h4>成長の余白（自己評価・下位2つ）</h4>
+      <p>${selfGrowthText}</p>
     </div>
   `);
 }
