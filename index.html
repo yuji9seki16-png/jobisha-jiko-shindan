@@ -123,7 +123,7 @@ input[type="text"]:focus, select:focus {
 
 /* ─── 結果 ─── */
 .result-summary {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
   margin-bottom: 20px;
 }
 .rs-item { border: 1px solid var(--border); padding: 10px 12px; background: var(--white); }
@@ -178,6 +178,18 @@ canvas#radarChart { max-height: 380px; }
 .send-status.ok { color: #1b5e20; }
 .send-status.err { color: #b71c1c; }
 
+/* ─── フォームエラー ─── */
+.field-error {
+  font-size: 12px; color: var(--accent); font-weight: 700;
+  margin: -8px 0 16px; padding: 8px 12px;
+  background: #fdecea; border-left: 3px solid var(--accent);
+}
+
+/* ─── モバイル調整 ─── */
+@media (max-width: 480px) {
+  .analysis-box { grid-template-columns: 1fr; }
+}
+
 /* ─── 印刷 ─── */
 @media print {
   body { background: #fff; }
@@ -195,7 +207,7 @@ canvas#radarChart { max-height: 380px; }
 <body>
 
 <header class="app-header">
-  <h1>浄美社 自己診断</h1>
+  <h1 id="appTitle">浄美社 自己診断</h1>
   <span class="step-indicator" id="stepLabel">STEP 1 / 3</span>
 </header>
 <div class="progress-bar">
@@ -218,19 +230,8 @@ canvas#radarChart { max-height: 380px; }
         <label class="field-label" for="inputDept">所属 <span>*</span></label>
         <input type="text" id="inputDept" placeholder="例：京都営業所">
       </div>
-      <div class="form-group">
-        <label class="field-label" for="inputStage">自己認識ステージ <span>*</span></label>
-        <select id="inputStage">
-          <option value="">── 選択してください ──</option>
-          <option value="S1">S1（入社間もない・基礎を学ぶ段階）</option>
-          <option value="S2">S2（基本業務を一人でこなせる）</option>
-          <option value="S3">S3（応用・イレギュラー対応ができる）</option>
-          <option value="S4">S4（後輩へのサポートができる）</option>
-          <option value="S5">S5（チームの中核として機能する）</option>
-          <option value="S6">S6（部門・組織をリードする）</option>
-          <option value="S7">S7（経営・全社的な判断に関与する）</option>
-        </select>
-      </div>
+
+      <div id="step1Error" class="field-error" style="display:none;"></div>
 
       <div style="margin-top:8px;padding:12px 16px;background:#f9f9f9;border-left:3px solid #1a1a1a;font-size:12px;color:#555;">
         このあと24問の設問に正直に回答してください（10〜15分）。<br>
@@ -269,7 +270,7 @@ canvas#radarChart { max-height: 380px; }
     <div class="chart-wrap">
       <h3>強み・伸びしろ レーダーチャート</h3>
       <canvas id="radarChart"></canvas>
-      <p style="font-size:10px;color:var(--muted);margin-top:8px;">青：あなたのスコア　灰：ステージ期待値</p>
+      <p class="chart-legend" style="font-size:10px;color:var(--muted);margin-top:8px;">青：あなたのスコア</p>
     </div>
 
     <!-- 能力別テーブル -->
@@ -279,9 +280,6 @@ canvas#radarChart { max-height: 380px; }
           <th style="width:40px;">区分</th>
           <th>能力</th>
           <th style="width:70px;">スコア</th>
-          <th style="width:60px;">期待値</th>
-          <th style="width:60px;">ギャップ</th>
-          <th style="width:90px;">判定</th>
         </tr>
         <tbody id="resultTableBody"></tbody>
       </table>
@@ -382,17 +380,6 @@ const QUESTION_ORDER = [
   [5,2],[1,2],[7,2],[3,2],[0,2],[6,2],[2,2],[4,2],
 ];
 
-// ステージ別期待スコア [①②③④⑤⑥⑦⑧]
-const STAGE_EXPECTED = {
-  S1: [1.5, 1.5, 2.0, 1.5, 2.0, 2.0, 2.5, 2.5],
-  S2: [2.0, 2.0, 2.5, 2.0, 2.5, 2.5, 2.5, 3.0],
-  S3: [2.5, 2.5, 3.0, 2.5, 3.0, 3.0, 3.0, 3.5],
-  S4: [3.0, 3.0, 3.5, 3.0, 3.0, 3.0, 3.0, 3.5],
-  S5: [3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5],
-  S6: [3.5, 4.0, 4.0, 4.0, 3.5, 3.5, 3.5, 4.0],
-  S7: [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0],
-};
-
 // GAS WebアプリURL（デプロイ後に設定）
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxusPu3t2K0ptCOaSf9MGZct5GV5o9EjXGKROAXh11ikgw12Mu0PubGqz3FLgAkFoo6Mg/exec";
 
@@ -402,7 +389,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbxusPu3t2K0ptCOaSf9MGZc
 let currentStep = 1;
 let currentQ = 0;
 let answers = new Array(24).fill(null);
-let userName = "", userDept = "", userStage = "";
+let userName = "", userDept = "";
 let radarChart = null;
 let submitted = false;
 let isManagerMode = false;
@@ -417,11 +404,15 @@ let urlToken = "";   // 上長評価モードでURLから受け取ったトー�
 function goStep2() {
   userName = document.getElementById("inputName").value.trim();
   userDept = document.getElementById("inputDept").value.trim();
-  userStage = document.getElementById("inputStage").value;
 
-  if (!userName) { alert("氏名を入力してください"); return; }
-  if (!userDept)  { alert("所属を入力してください"); return; }
-  if (!userStage) { alert("ステージを選択してください"); return; }
+  const errEl = document.getElementById("step1Error");
+  if (!userName || !userDept) {
+    const missing = [!userName && "氏名", !userDept && "所属"].filter(Boolean).join("・");
+    errEl.textContent = `${missing}を入力してください`;
+    errEl.style.display = "block";
+    return;
+  }
+  errEl.style.display = "none";
 
   showStep(2);
   currentQ = 0;
@@ -531,13 +522,6 @@ function calcScores() {
   });
 }
 
-function getJudge(gap) {
-  if (gap >= 0.5)  return { mark: "◎", label: "ステージ超え", cls: "j-exc" };
-  if (gap >= -0.4) return { mark: "○", label: "適正",       cls: "j-ok" };
-  if (gap >= -1.0) return { mark: "△", label: "伸びしろ",   cls: "j-grow" };
-  return              { mark: "▽", label: "重点育成",        cls: "j-focus" };
-}
-
 // ─────────────────────────────────────────
 // 結果表示
 // ─────────────────────────────────────────
@@ -547,27 +531,24 @@ function showResult() {
   document.getElementById("stepLabel").textContent = "STEP 3 / 3 ─ 結果";
 
   const scores = calcScores();
-  const expected = STAGE_EXPECTED[userStage];
-  const gaps = scores.map((s, i) => Math.round((s - expected[i]) * 10) / 10);
-  const judges = gaps.map(g => getJudge(g));
 
   // ヘッダー
   document.getElementById("resultName").textContent = isManagerMode
     ? `${targetName} さんへの上長評価（評価者：${userName}）`
     : userName + " さんの自己診断結果";
-  document.getElementById("resultMeta").textContent =
-    `所属：${userDept}　ステージ：${userStage}　診断日：${new Date().toLocaleDateString("ja-JP")}`;
+  document.getElementById("resultMeta").textContent = isManagerMode
+    ? `評価者所属：${userDept}　診断日：${new Date().toLocaleDateString("ja-JP")}`
+    : `所属：${userDept}　診断日：${new Date().toLocaleDateString("ja-JP")}`;
 
-  // スコアサマリー（◎個数・○・△・▽）
-  const cnt = { "◎": 0, "○": 0, "△": 0, "▽": 0 };
-  judges.forEach(j => cnt[j.mark]++);
+  // スコアサマリー
   const avgScore = Math.round(scores.reduce((a, b) => a + b) / 8 * 10) / 10;
+  const maxScore = Math.max(...scores);
+  const minScore = Math.min(...scores);
 
   document.getElementById("resultSummary").innerHTML = `
     <div class="rs-item"><div class="rs-lbl">平均スコア</div><div class="rs-val j-ok">${avgScore}</div></div>
-    <div class="rs-item"><div class="rs-lbl">◎ ステージ超え</div><div class="rs-val j-exc">${cnt["◎"]}能力</div></div>
-    <div class="rs-item"><div class="rs-lbl">△ 伸びしろ</div><div class="rs-val j-grow">${cnt["△"]}能力</div></div>
-    <div class="rs-item"><div class="rs-lbl">▽ 重点育成</div><div class="rs-val j-focus">${cnt["▽"]}能力</div></div>
+    <div class="rs-item"><div class="rs-lbl">最も高いスコア</div><div class="rs-val j-exc">${maxScore.toFixed(1)}</div></div>
+    <div class="rs-item"><div class="rs-lbl">最も低いスコア</div><div class="rs-val j-focus">${minScore.toFixed(1)}</div></div>
   `;
 
   // レーダーチャート
@@ -588,16 +569,6 @@ function showResult() {
           pointBackgroundColor: isManagerMode ? "#c0392b" : "#1a3c5e",
           pointRadius: 4,
         },
-        {
-          label: `${userStage} 期待値`,
-          data: expected,
-          backgroundColor: "rgba(150,150,150,0.08)",
-          borderColor: "#999",
-          borderWidth: 1.5,
-          borderDash: [4, 4],
-          pointBackgroundColor: "#999",
-          pointRadius: 3,
-        },
       ],
     },
     options: {
@@ -614,12 +585,13 @@ function showResult() {
       },
     },
   });
+  document.querySelector(".chart-legend").textContent = isManagerMode
+    ? "赤：上長評価のスコア"
+    : "青：あなたのスコア";
 
   // テーブル
   let tableHTML = "";
   CAPABILITIES.forEach((cap, i) => {
-    const j = judges[i];
-    const gapStr = (gaps[i] >= 0 ? "+" : "") + gaps[i].toFixed(1);
     const typeTag = cap.type === "スキル"
       ? `<span class="skill-tag tag-skill">スキル</span>`
       : `<span class="skill-tag tag-stance">スタンス</span>`;
@@ -628,32 +600,26 @@ function showResult() {
         <td style="text-align:center;">${typeTag}</td>
         <td class="cap-name" style="font-size:12px;">${cap.name}</td>
         <td class="score-cell">${scores[i].toFixed(1)}</td>
-        <td class="exp-cell">${expected[i].toFixed(1)}</td>
-        <td class="gap-cell ${j.cls}">${gapStr}</td>
-        <td class="judge-cell ${j.cls}">${j.mark} ${j.label}</td>
       </tr>`;
   });
   document.getElementById("resultTableBody").innerHTML = tableHTML;
 
-  // 分析テキスト
-  const excCaps = CAPABILITIES.filter((_, i) => judges[i].mark === "◎").map(c => c.name);
-  const focusCaps = CAPABILITIES.filter((_, i) => ["△","▽"].includes(judges[i].mark)).map(c => c.name);
+  // 分析テキスト（素点の上位2つ・下位2つ）
+  const ranked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: scores[i] }))
+    .sort((a, b) => b.score - a.score);
+  const strengthItems = ranked.slice(0, 2);
+  const growthItems = ranked.slice(-2).reverse();
 
-  const strengthText = excCaps.length > 0
-    ? excCaps.map(n => `・${n}`).join("<br>")
-    : "ステージに対してバランスよく発揮できています";
-
-  const growthText = focusCaps.length > 0
-    ? focusCaps.map(n => `・${n}`).join("<br>")
-    : "現在のステージに対して適正な水準です";
+  const strengthText = strengthItems.map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+  const growthText = growthItems.map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
 
   document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
-      <h4>◎ あなたの強み仮説</h4>
+      <h4>あなたの強み仮説（スコア上位2つ）</h4>
       <p>${strengthText}</p>
     </div>
     <div class="analysis-item">
-      <h4>△▽ 成長の余白</h4>
+      <h4>成長の余白（スコア下位2つ）</h4>
       <p>${growthText}</p>
     </div>
   `;
@@ -676,9 +642,6 @@ function sendToGAS() {
   statusEl.textContent = "送信中…";
 
   const scores = calcScores();
-  const expected = STAGE_EXPECTED[userStage];
-  const gaps = scores.map((s, i) => Math.round((s - expected[i]) * 10) / 10);
-  const judges = gaps.map(g => getJudge(g));
 
   if (!isManagerMode) {
     // 自己評価の送信ごとに新しい認証トークンを発行する（他人からの推測を防ぐ）
@@ -691,16 +654,12 @@ function sendToGAS() {
     timestamp: new Date().toISOString(),
     name: userName,
     dept: userDept,
-    stage: userStage,
     comment: document.getElementById("commentBox").value,
     scores: scores,
-    expected: expected,
-    gaps: gaps,
-    judges: judges.map(j => j.mark + j.label),
     type: isManagerMode ? "manager" : "self",
     target_name: isManagerMode ? targetName : "",
     token: isManagerMode ? urlToken : selfToken,
-    manager_url: isManagerMode ? "" : buildManagerUrl(selfToken, userName, userStage),
+    manager_url: isManagerMode ? "" : buildManagerUrl(selfToken, userName),
   };
 
   // GAS_URLが設定前の場合はデモメッセージ
@@ -753,19 +712,20 @@ function resetAll() {
   if (!confirm("最初からやり直しますか？")) return;
   answers = new Array(24).fill(null);
   currentQ = 0;
-  userName = ""; userDept = ""; userStage = "";
+  userName = ""; userDept = "";
   submitted = false;
   document.getElementById("inputName").value = "";
   document.getElementById("inputDept").value = "";
-  document.getElementById("inputStage").value = "";
+  document.getElementById("step1Error").style.display = "none";
   document.getElementById("sendStatus").textContent = "";
   document.getElementById("progressFill").style.width = "0%";
   document.getElementById("stepLabel").textContent = "STEP 1 / 3";
+  document.getElementById("appTitle").textContent = "浄美社 自己診断";
   showStep(1);
 }
 
 // ─────────────────────────────────────────
-// URLパラメータ初期化（機能1：ステージ固定）
+// URLパラメータ初期化
 // ─────────────────────────────────────────
 function initFromURL() {
   const p = new URLSearchParams(window.location.search);
@@ -775,15 +735,14 @@ function initFromURL() {
 
   if (p.get("name"))  document.getElementById("inputName").value  = p.get("name");
   if (p.get("dept"))  document.getElementById("inputDept").value  = p.get("dept");
-  if (p.get("stage")) document.getElementById("inputStage").value = p.get("stage");
 
   const lockName  = !!p.get("name");
   const lockDept  = !!p.get("dept");
-  const lockStage = !!p.get("stage") || isManagerMode;
 
-  if (lockName || lockDept || lockStage) applyLockUI(lockName, lockDept, lockStage);
+  if (lockName || lockDept) applyLockUI(lockName, lockDept);
 
   if (isManagerMode) {
+    document.getElementById("appTitle").textContent = "浄美社 上長評価";
     document.querySelector("#step1 .card-title").textContent = "上長評価モード";
     document.querySelector("#step1 .card-desc").textContent =
       `「${targetName}」さんへの評価です。あなた自身の氏名と所属を入力してください。`;
@@ -791,7 +750,7 @@ function initFromURL() {
   }
 }
 
-function applyLockUI(lockName, lockDept, lockStage) {
+function applyLockUI(lockName, lockDept) {
   const lockStyle = "background:#f0f0f0;color:#555;border-color:#ccc;pointer-events:none;";
   const badge = '<span style="font-size:10px;background:#1a1a1a;color:#fff;padding:1px 6px;border-radius:1px;margin-left:6px;">会社設定</span>';
   if (lockName) {
@@ -804,11 +763,6 @@ function applyLockUI(lockName, lockDept, lockStage) {
     el.setAttribute("readonly", true); el.style.cssText = lockStyle;
     document.querySelector("label[for='inputDept']").insertAdjacentHTML("beforeend", badge);
   }
-  if (lockStage) {
-    const el = document.getElementById("inputStage");
-    el.setAttribute("disabled", true); el.style.cssText = lockStyle;
-    document.querySelector("label[for='inputStage']").insertAdjacentHTML("beforeend", badge);
-  }
 }
 
 // ─────────────────────────────────────────
@@ -820,7 +774,7 @@ function fetchSelfScoreAndOverlay(managerScores) {
 
   const timer = setTimeout(() => {
     window[cbName] = null;
-    statusEl.textContent = "✓ 上長評価を送信しました（本人の自己評価は当日分が見つかりませんでした）。";
+    statusEl.textContent = "✓ 上長評価を送信しました。本人の自己評価がまだ見つかりません（未送信か、URLが正しくない可能性があります）。";
   }, 8000);
 
   window[cbName] = function(result) {
@@ -828,10 +782,10 @@ function fetchSelfScoreAndOverlay(managerScores) {
     window[cbName] = null;
     document.getElementById("jsonpScript")?.remove();
     if (result.status === "ok") {
-      overlayManagerChart(managerScores, result.scores, result.stage);
-      statusEl.textContent = `✓ 上長評価を送信しました。「${targetName}」さんの自己評価（${result.stage}）と重ね表示しています。`;
+      overlayManagerChart(managerScores, result.scores);
+      statusEl.textContent = `✓ 上長評価を送信しました。「${targetName}」さんの自己評価と重ね表示しています。`;
     } else {
-      statusEl.textContent = "✓ 上長評価を送信しました（本人の自己評価は当日分が見つかりませんでした）。";
+      statusEl.textContent = "✓ 上長評価を送信しました。本人の自己評価がまだ見つかりません（未送信か、URLが正しくない可能性があります）。";
     }
   };
 
@@ -841,8 +795,7 @@ function fetchSelfScoreAndOverlay(managerScores) {
   document.body.appendChild(script);
 }
 
-function overlayManagerChart(managerScores, selfScores, selfStage) {
-  const labels = CAPABILITIES.map(c => c.short);
+function overlayManagerChart(managerScores, selfScores) {
   radarChart.data.datasets = [
     {
       label: `自己評価（${targetName}）`,
@@ -858,28 +811,19 @@ function overlayManagerChart(managerScores, selfScores, selfStage) {
       borderColor: "#c0392b", borderWidth: 2.5,
       pointBackgroundColor: "#c0392b", pointRadius: 4,
     },
-    {
-      label: `${selfStage} 期待値`,
-      data: STAGE_EXPECTED[selfStage],
-      backgroundColor: "rgba(150,150,150,0.05)",
-      borderColor: "#bbb", borderWidth: 1.5,
-      borderDash: [4,4],
-      pointBackgroundColor: "#bbb", pointRadius: 3,
-    },
   ];
   radarChart.update();
-  const legendEl = document.querySelector(".chart-legend");
-  if (legendEl) legendEl.textContent = "青：本人の自己評価　赤：上長評価　灰：ステージ期待値";
+  document.querySelector(".chart-legend").textContent = "青：本人の自己評価　赤：上長評価";
 }
 
-function buildManagerUrl(token, name, stage) {
+function buildManagerUrl(token, name) {
   const base = window.location.origin + window.location.pathname;
   // target=氏名 は画面表示用の飾り。実際の認証・データ取得は token で行う
-  return `${base}?mode=manager&token=${encodeURIComponent(token)}&target=${encodeURIComponent(name)}&stage=${stage}`;
+  return `${base}?mode=manager&token=${encodeURIComponent(token)}&target=${encodeURIComponent(name)}`;
 }
 
 function showManagerUrlBox() {
-  const url = buildManagerUrl(selfToken, userName, userStage);
+  const url = buildManagerUrl(selfToken, userName);
   document.getElementById("managerUrlText").value = url;
   document.getElementById("managerUrlBox").style.display = "block";
 }
