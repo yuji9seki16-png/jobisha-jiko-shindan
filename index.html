@@ -276,7 +276,7 @@ canvas#radarChart { max-height: 380px; }
     <!-- 能力別テーブル -->
     <div class="card" style="padding:0;overflow:hidden;">
       <table class="result-table">
-        <tr>
+        <tr id="resultTableHead">
           <th style="width:40px;">区分</th>
           <th>能力</th>
           <th style="width:70px;">スコア</th>
@@ -589,7 +589,12 @@ function showResult() {
     ? "赤：上長評価のスコア"
     : "青：あなたのスコア";
 
-  // テーブル
+  // テーブル（上長評価との重ね表示は overlayManagerChart 側で比較表に差し替える）
+  document.getElementById("resultTableHead").innerHTML = `
+    <th style="width:40px;">区分</th>
+    <th>能力</th>
+    <th style="width:70px;">スコア</th>
+  `;
   let tableHTML = "";
   CAPABILITIES.forEach((cap, i) => {
     const typeTag = cap.type === "スキル"
@@ -815,6 +820,53 @@ function overlayManagerChart(managerScores, selfScores) {
   ];
   radarChart.update();
   document.querySelector(".chart-legend").textContent = "青：本人の自己評価　赤：上長評価";
+
+  // 認識の一致・ズレが大きい項目を特定
+  const diffs = CAPABILITIES.map((cap, i) => ({
+    name: cap.name,
+    self: selfScores[i],
+    manager: managerScores[i],
+    diff: Math.abs(selfScores[i] - managerScores[i]),
+  }));
+  const mostAligned = diffs.reduce((a, b) => (b.diff < a.diff ? b : a));
+  const mostGap = diffs.reduce((a, b) => (b.diff > a.diff ? b : a));
+
+  // 能力別テーブルを「自己評価／上長評価／差分」の比較表に差し替え
+  document.getElementById("resultTableHead").innerHTML = `
+    <th style="width:40px;">区分</th>
+    <th>能力</th>
+    <th style="width:60px;">自己評価</th>
+    <th style="width:60px;">上長評価</th>
+    <th style="width:50px;">差分</th>
+  `;
+  let compareHTML = "";
+  diffs.forEach((d, i) => {
+    const cap = CAPABILITIES[i];
+    const typeTag = cap.type === "スキル"
+      ? `<span class="skill-tag tag-skill">スキル</span>`
+      : `<span class="skill-tag tag-stance">スタンス</span>`;
+    const diffCell = d.diff === 0 ? "0.0" : d.diff.toFixed(1);
+    compareHTML += `
+      <tr>
+        <td style="text-align:center;">${typeTag}</td>
+        <td class="cap-name" style="font-size:12px;">${cap.name}</td>
+        <td class="score-cell">${d.self.toFixed(1)}</td>
+        <td class="score-cell">${d.manager.toFixed(1)}</td>
+        <td class="score-cell">${diffCell}</td>
+      </tr>`;
+  });
+  document.getElementById("resultTableBody").innerHTML = compareHTML;
+
+  document.getElementById("analysisBox").insertAdjacentHTML("beforeend", `
+    <div class="analysis-item">
+      <h4>認識が一致している項目</h4>
+      <p>・${mostAligned.name}（自己評価 ${mostAligned.self.toFixed(1)} / 上長評価 ${mostAligned.manager.toFixed(1)}）</p>
+    </div>
+    <div class="analysis-item">
+      <h4>認識のズレが大きい項目</h4>
+      <p>・${mostGap.name}（自己評価 ${mostGap.self.toFixed(1)} / 上長評価 ${mostGap.manager.toFixed(1)}）</p>
+    </div>
+  `);
 }
 
 function buildManagerUrl(token, name) {
