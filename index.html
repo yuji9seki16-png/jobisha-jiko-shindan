@@ -304,13 +304,12 @@ canvas#radarChart { max-height: 380px; }
 
     <!-- 面談前メモ -->
     <div class="comment-area">
-      <label for="commentBox">面談前の一言メモ（任意）</label>
+      <label for="commentBox">面談前の一言メモ（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
     </div>
 
     <div id="step3-nav" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-      <button class="btn btn-secondary" onclick="window.print()">🖨 印刷 / PDF保存</button>
-      <button class="btn btn-accent" onclick="sendToGAS()">📤 結果を送信する</button>
+      <button class="btn btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">🖨 印刷 / PDF保存</button>
       <button class="btn btn-secondary" onclick="resetAll()">← はじめからやり直す</button>
     </div>
     <div class="send-status" id="sendStatus"></div>
@@ -325,7 +324,7 @@ canvas#radarChart { max-height: 380px; }
       </div>
     </div>
     <div class="send-area" style="margin-top:8px;font-size:11px;color:#888;">
-      ※「結果を送信する」を押すと、氏名・所属・スコア・面談前メモが管理者のスプレッドシートに記録されます。
+      ※ 回答は自動で記録されます（氏名・所属・スコア・メモ）。送信ボタンを押す必要はありません。
     </div>
   </div>
 
@@ -406,6 +405,9 @@ let answers = new Array(24).fill(null);
 let userName = "", userDept = "";
 let radarChart = null;
 let submitted = false;
+let lastSentAnswers = "";   // 自動送信ずみの回答内容
+let lastSentComment = "";   // 自動送信ずみのメモ
+let overlayDone = false;    // 上長モードで重ね表示ずみか
 let isManagerMode = false;
 let targetName = "";
 let autoAdvanceTimer = null;
@@ -541,6 +543,7 @@ function calcScores() {
 // ─────────────────────────────────────────
 function showResult() {
   showStep(3);
+  if (isManagerMode) document.getElementById("printBtn").style.display = "";
   document.getElementById("progressFill").style.width = "100%";
   document.getElementById("stepLabel").textContent = "STEP 3 / 3 ─ 結果";
 
@@ -640,11 +643,28 @@ function showResult() {
       <p>${growthText}</p>
     </div>
   `;
+
+  // 結果が出た時点で自動的に記録する（送信ボタンは廃止）
+  // 答え直して戻ってきたときは、記録しなおす
+  if (answers.join(",") !== lastSentAnswers) submitted = false;
+  if (!submitted) sendToGAS();
 }
 
 // ─────────────────────────────────────────
 // GAS送信
 // ─────────────────────────────────────────
+// メモ欄：書いて他をさわった時点で自動保存する
+document.addEventListener("DOMContentLoaded", function() {
+  const box = document.getElementById("commentBox");
+  if (!box) return;
+  box.addEventListener("blur", function() {
+    if (this.value === lastSentComment) return;
+    if (!lastSentAnswers) return;   // まだ一度も記録されていないときは何もしない
+    submitted = false;
+    sendToGAS();
+  });
+});
+
 function lockSendButton() {
   const btn = document.querySelector("#step3-nav .btn-accent") ||
               document.querySelector("button[onclick='sendToGAS()']");
@@ -660,8 +680,9 @@ function sendToGAS() {
 
   const scores = calcScores();
 
-  if (!isManagerMode) {
-    // 自己評価の送信ごとに新しい認証トークンを発行する（他人からの推測を防ぐ）
+  if (!isManagerMode && !selfToken) {
+    // 認証トークンは最初の記録で一度だけ発行する（他人からの推測を防ぐ）
+    // 答え直して記録し直しても同じトークンを使うので、上長へ渡したURLはそのまま使える
     selfToken = (window.crypto && crypto.randomUUID)
       ? crypto.randomUUID()
       : Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -699,13 +720,19 @@ function sendToGAS() {
   })
   .then(() => {
     submitted = true; lockSendButton();
+    lastSentAnswers = answers.join(",");
+    lastSentComment = document.getElementById("commentBox").value;
     if (isManagerMode) {
       statusEl.className = "send-status ok";
-      statusEl.textContent = "✓ 上長評価を送信しました。自己評価データを検索中…";
-      fetchSelfScoreAndOverlay(scores);
+      if (overlayDone) {
+        statusEl.textContent = `✓ 記録しました。「${targetName}」さんの自己評価と重ねて表示しています。`;
+      } else {
+        statusEl.textContent = "✓ 記録しました。本人の自己評価を探しています…";
+        fetchSelfScoreAndOverlay(scores);
+      }
     } else {
       statusEl.className = "send-status ok";
-      statusEl.textContent = "✓ 結果を送信しました。管理者スプレッドシートに記録されました。";
+      statusEl.textContent = "✓ 記録しました。下の上長評価用URLを、ご自身の上長へ送ってください。";
       showManagerUrlBox();
     }
   })
@@ -732,6 +759,10 @@ function resetAll() {
   currentQ = 0;
   userName = ""; userDept = "";
   submitted = false;
+  selfToken = ""; lastSentAnswers = ""; lastSentComment = ""; overlayDone = false;
+  document.getElementById("commentBox").value = "";
+  document.getElementById("managerUrlBox").style.display = "none";
+  document.getElementById("printBtn").style.display = "none";
   document.getElementById("inputName").value = "";
   document.getElementById("inputDept").value = "";
   document.getElementById("step1Error").style.display = "none";
@@ -800,7 +831,7 @@ function fetchSelfScoreAndOverlay(managerScores) {
 
   const timer = setTimeout(() => {
     window[cbName] = null;
-    statusEl.textContent = "✓ 上長評価を送信しました。本人の自己評価がまだ見つかりません（未送信か、URLが正しくない可能性があります）。";
+    statusEl.textContent = "✓ 記録しました。本人の自己評価がまだ見つかりません（本人がまだ回答していないか、URLが違う可能性があります）。";
   }, 8000);
 
   window[cbName] = function(result) {
@@ -809,9 +840,10 @@ function fetchSelfScoreAndOverlay(managerScores) {
     document.getElementById("jsonpScript")?.remove();
     if (result.status === "ok") {
       overlayManagerChart(managerScores, result.scores);
-      statusEl.textContent = `✓ 上長評価を送信しました。「${targetName}」さんの自己評価と重ね表示しています。`;
+      overlayDone = true;
+      statusEl.textContent = `✓ 記録しました。「${targetName}」さんの自己評価と重ねて表示しています。`;
     } else {
-      statusEl.textContent = "✓ 上長評価を送信しました。本人の自己評価がまだ見つかりません（未送信か、URLが正しくない可能性があります）。";
+      statusEl.textContent = "✓ 記録しました。本人の自己評価がまだ見つかりません（本人がまだ回答していないか、URLが違う可能性があります）。";
     }
   };
 
