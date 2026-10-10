@@ -169,6 +169,18 @@ canvas#radarChart { max-height: 380px; }
 }
 .comment-box:focus { outline: none; border-color: var(--brand); }
 
+/* 個人目標 */
+.goal-field { margin-bottom: 14px; }
+.goal-field:last-child { margin-bottom: 0; }
+.goal-field .goal-cap { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.goal-field .goal-cap .skill-tag { margin-right: 6px; }
+.goal-box {
+  width: 100%; min-height: 60px; border: 1px solid var(--border);
+  padding: 10px; font-size: 13px; font-family: inherit;
+  border-radius: 2px; resize: vertical;
+}
+.goal-box:focus { outline: none; border-color: var(--brand); }
+
 /* 分析テキスト */
 .analysis-box {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
@@ -302,6 +314,16 @@ canvas#radarChart { max-height: 380px; }
     <!-- 分析テキスト -->
     <div class="analysis-box" id="analysisBox"></div>
 
+    <!-- 本人の面談前メモ・個人目標（上長評価モードで、本人の自己評価と重ねて表示できた時のみ表示） -->
+    <div class="comment-area" id="selfInputDisplay" style="display:none;background:#f7f9fc;"></div>
+
+    <!-- 個人目標（成長の余白2つに対して） -->
+    <div class="comment-area" id="goalArea" style="display:none;">
+      <label style="margin-bottom:4px;">個人目標（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 12px;">「成長の余白」の2つについて、次に取り組みたいことを書いてください。</p>
+      <div id="goalFields"></div>
+    </div>
+
     <!-- 面談前メモ -->
     <div class="comment-area">
       <label for="commentBox">面談前の一言メモ（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
@@ -413,6 +435,9 @@ let targetName = "";
 let autoAdvanceTimer = null;
 let selfToken = "";  // 自己評価送信時に発行する認証トークン（上長評価URLに埋め込む）
 let urlToken = "";   // 上長評価モードでURLから受け取ったトークン
+let goalCaps = ["", ""];   // 個人目標の対象能力名（成長の余白2つ）
+let goalTexts = ["", ""];  // 個人目標の内容
+let lastSentGoals = "";    // 自動送信ずみの個人目標
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -625,7 +650,7 @@ function showResult() {
   document.getElementById("resultTableBody").innerHTML = tableHTML;
 
   // 分析テキスト（素点の上位2つ・下位2つ）
-  const ranked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: scores[i] }))
+  const ranked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: scores[i], idx: i, type: cap.type }))
     .sort((a, b) => b.score - a.score);
   const strengthItems = ranked.slice(0, 2);
   const growthItems = ranked.slice(-2).reverse();
@@ -644,10 +669,50 @@ function showResult() {
     </div>
   `;
 
+  // 個人目標欄（自己診断モードのみ・成長の余白2つに対して書く）
+  if (!isManagerMode) {
+    renderGoalFields(growthItems);
+  }
+
   // 結果が出た時点で自動的に記録する（送信ボタンは廃止）
   // 答え直して戻ってきたときは、記録しなおす
   if (answers.join(",") !== lastSentAnswers) submitted = false;
   if (!submitted) sendToGAS();
+}
+
+// ─────────────────────────────────────────
+// 個人目標欄（成長の余白2つに対して書く）
+// ─────────────────────────────────────────
+function renderGoalFields(growthItems) {
+  const area = document.getElementById("goalArea");
+  const fields = document.getElementById("goalFields");
+  area.style.display = "block";
+
+  goalCaps = growthItems.map(g => g.name);
+  if (goalTexts.length !== growthItems.length) goalTexts = growthItems.map(() => "");
+
+  fields.innerHTML = growthItems.map((g, i) => {
+    const typeTag = g.type === "スキル"
+      ? `<span class="skill-tag tag-skill">スキル</span>`
+      : `<span class="skill-tag tag-stance">スタンス</span>`;
+    return `
+      <div class="goal-field">
+        <div class="goal-cap">${typeTag}${g.name}</div>
+        <textarea class="goal-box" id="goalBox${i}" data-idx="${i}"
+          placeholder="次に取り組みたいことを書いてください…">${goalTexts[i] || ""}</textarea>
+      </div>`;
+  }).join("");
+
+  growthItems.forEach((g, i) => {
+    document.getElementById(`goalBox${i}`).addEventListener("blur", function() {
+      goalTexts[i] = this.value;
+      const joined = goalTexts.join("||");
+      if (joined === lastSentGoals) return;
+      if (!lastSentAnswers) return;  // まだ一度も記録されていないときは何もしない
+      submitted = false;
+      sendToGAS();
+    });
+  });
 }
 
 // ─────────────────────────────────────────
@@ -699,6 +764,8 @@ function sendToGAS() {
     target_name: isManagerMode ? targetName : "",
     token: isManagerMode ? urlToken : selfToken,
     manager_url: isManagerMode ? "" : buildManagerUrl(selfToken, userName),
+    goal1_cap: goalCaps[0] || "", goal1_text: goalTexts[0] || "",
+    goal2_cap: goalCaps[1] || "", goal2_text: goalTexts[1] || "",
   };
 
   // GAS_URLが設定前の場合はデモメッセージ
@@ -722,6 +789,7 @@ function sendToGAS() {
     submitted = true; lockSendButton();
     lastSentAnswers = answers.join(",");
     lastSentComment = document.getElementById("commentBox").value;
+    lastSentGoals = goalTexts.join("||");
     if (isManagerMode) {
       statusEl.className = "send-status ok";
       if (overlayDone) {
@@ -760,6 +828,11 @@ function resetAll() {
   userName = ""; userDept = "";
   submitted = false;
   selfToken = ""; lastSentAnswers = ""; lastSentComment = ""; overlayDone = false;
+  goalCaps = ["", ""]; goalTexts = ["", ""]; lastSentGoals = "";
+  document.getElementById("goalArea").style.display = "none";
+  document.getElementById("goalFields").innerHTML = "";
+  document.getElementById("selfInputDisplay").style.display = "none";
+  document.getElementById("selfInputDisplay").innerHTML = "";
   document.getElementById("commentBox").value = "";
   document.getElementById("managerUrlBox").style.display = "none";
   document.getElementById("printBtn").style.display = "none";
@@ -840,6 +913,7 @@ function fetchSelfScoreAndOverlay(managerScores) {
     document.getElementById("jsonpScript")?.remove();
     if (result.status === "ok") {
       overlayManagerChart(managerScores, result.scores);
+      renderSelfInputDisplay(result);
       overlayDone = true;
       statusEl.textContent = `✓ 記録しました。「${targetName}」さんの自己評価と重ねて表示しています。`;
     } else {
@@ -959,6 +1033,30 @@ function overlayManagerChart(managerScores, selfScores) {
       </div>
     </div>
   `;
+}
+
+// 本人の面談前メモ・個人目標を上長側に表示する（印刷時に一緒に出るように）
+function renderSelfInputDisplay(result) {
+  const box = document.getElementById("selfInputDisplay");
+  const comment = (result.comment || "").trim();
+  const goals = [
+    { cap: result.goal1_cap, text: result.goal1_text },
+    { cap: result.goal2_cap, text: result.goal2_text },
+  ].filter(g => g.cap || g.text);
+
+  let html = `<label style="margin-bottom:10px;">本人の面談前メモ・個人目標</label>`;
+  html += `<div style="font-size:12px;color:#333;line-height:1.7;margin-bottom:${goals.length ? "14px" : "0"};">`
+    + (comment ? comment.replace(/\n/g, "<br>") : "（本人のメモはまだ書かれていません）")
+    + `</div>`;
+  if (goals.length) {
+    html += goals.map(g => `
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">${g.cap}</div>
+        <div style="font-size:12px;color:#333;line-height:1.6;">${(g.text || "（未記入）").replace(/\n/g, "<br>")}</div>
+      </div>`).join("");
+  }
+  box.innerHTML = html;
+  box.style.display = "block";
 }
 
 function buildManagerUrl(token, name) {
