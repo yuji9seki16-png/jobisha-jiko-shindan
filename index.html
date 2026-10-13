@@ -324,6 +324,16 @@ canvas#radarChart { max-height: 380px; }
       <div id="goalFields"></div>
     </div>
 
+    <!-- 上期・下期の目標／本人の振り返り（自己診断モードのみ） -->
+    <div class="comment-area" id="termGoalArea" style="display:none;">
+      <label for="termGoalBox">上期・下期の目標（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <textarea class="comment-box" id="termGoalBox" placeholder="この期間で取り組みたい目標・チャレンジを書いてください…"></textarea>
+    </div>
+    <div class="comment-area" id="selfReflectionArea" style="display:none;">
+      <label for="selfReflectionBox">本人の振り返り（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <textarea class="comment-box" id="selfReflectionBox" placeholder="これまでの期間を振り返って、できたこと・できなかったことを書いてください…"></textarea>
+    </div>
+
     <!-- 面談前メモ -->
     <div class="comment-area">
       <label for="commentBox">面談前の一言メモ（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
@@ -438,6 +448,8 @@ let urlToken = "";   // 上長評価モードでURLから受け取ったトー�
 let goalCaps = ["", ""];   // 個人目標の対象能力名（成長の余白2つ）
 let goalTexts = ["", ""];  // 個人目標の内容
 let lastSentGoals = "";    // 自動送信ずみの個人目標
+let lastSentTermGoal = "";        // 自動送信ずみの「上期・下期の目標」
+let lastSentSelfReflection = "";  // 自動送信ずみの「本人の振り返り」
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -672,6 +684,8 @@ function showResult() {
   // 個人目標欄（自己診断モードのみ・成長の余白2つに対して書く）
   if (!isManagerMode) {
     renderGoalFields(growthItems);
+    document.getElementById("termGoalArea").style.display = "block";
+    document.getElementById("selfReflectionArea").style.display = "block";
   }
 
   // 結果が出た時点で自動的に記録する（送信ボタンは廃止）
@@ -728,6 +742,26 @@ document.addEventListener("DOMContentLoaded", function() {
     submitted = false;
     sendToGAS();
   });
+
+  const termGoalBox = document.getElementById("termGoalBox");
+  if (termGoalBox) {
+    termGoalBox.addEventListener("blur", function() {
+      if (this.value === lastSentTermGoal) return;
+      if (!lastSentAnswers) return;
+      submitted = false;
+      sendToGAS();
+    });
+  }
+
+  const selfReflectionBox = document.getElementById("selfReflectionBox");
+  if (selfReflectionBox) {
+    selfReflectionBox.addEventListener("blur", function() {
+      if (this.value === lastSentSelfReflection) return;
+      if (!lastSentAnswers) return;
+      submitted = false;
+      sendToGAS();
+    });
+  }
 });
 
 function lockSendButton() {
@@ -766,6 +800,8 @@ function sendToGAS() {
     manager_url: isManagerMode ? "" : buildManagerUrl(selfToken, userName),
     goal1_cap: goalCaps[0] || "", goal1_text: goalTexts[0] || "",
     goal2_cap: goalCaps[1] || "", goal2_text: goalTexts[1] || "",
+    term_goal: isManagerMode ? "" : (document.getElementById("termGoalBox") ? document.getElementById("termGoalBox").value : ""),
+    self_reflection: isManagerMode ? "" : (document.getElementById("selfReflectionBox") ? document.getElementById("selfReflectionBox").value : ""),
   };
 
   // GAS_URLが設定前の場合はデモメッセージ
@@ -790,6 +826,8 @@ function sendToGAS() {
     lastSentAnswers = answers.join(",");
     lastSentComment = document.getElementById("commentBox").value;
     lastSentGoals = goalTexts.join("||");
+    if (document.getElementById("termGoalBox")) lastSentTermGoal = document.getElementById("termGoalBox").value;
+    if (document.getElementById("selfReflectionBox")) lastSentSelfReflection = document.getElementById("selfReflectionBox").value;
     if (isManagerMode) {
       statusEl.className = "send-status ok";
       if (overlayDone) {
@@ -829,8 +867,13 @@ function resetAll() {
   submitted = false;
   selfToken = ""; lastSentAnswers = ""; lastSentComment = ""; overlayDone = false;
   goalCaps = ["", ""]; goalTexts = ["", ""]; lastSentGoals = "";
+  lastSentTermGoal = ""; lastSentSelfReflection = "";
   document.getElementById("goalArea").style.display = "none";
   document.getElementById("goalFields").innerHTML = "";
+  document.getElementById("termGoalArea").style.display = "none";
+  document.getElementById("termGoalBox").value = "";
+  document.getElementById("selfReflectionArea").style.display = "none";
+  document.getElementById("selfReflectionBox").value = "";
   document.getElementById("selfInputDisplay").style.display = "none";
   document.getElementById("selfInputDisplay").innerHTML = "";
   document.getElementById("commentBox").value = "";
@@ -1043,6 +1086,8 @@ function renderSelfInputDisplay(result) {
     { cap: result.goal1_cap, text: result.goal1_text },
     { cap: result.goal2_cap, text: result.goal2_text },
   ].filter(g => g.cap || g.text);
+  const termGoal = (result.term_goal || "").trim();
+  const selfReflection = (result.self_reflection || "").trim();
 
   let html = `<label style="margin-bottom:10px;">本人の面談前メモ・個人目標</label>`;
   html += `<div style="font-size:12px;color:#333;line-height:1.7;margin-bottom:${goals.length ? "14px" : "0"};">`
@@ -1054,6 +1099,17 @@ function renderSelfInputDisplay(result) {
         <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">${g.cap}</div>
         <div style="font-size:12px;color:#333;line-height:1.6;">${(g.text || "（未記入）").replace(/\n/g, "<br>")}</div>
       </div>`).join("");
+  }
+  if (termGoal || selfReflection) {
+    html += `
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">上期・下期の目標</div>
+        <div style="font-size:12px;color:#333;line-height:1.6;">${(termGoal || "（未記入）").replace(/\n/g, "<br>")}</div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">本人の振り返り</div>
+        <div style="font-size:12px;color:#333;line-height:1.6;">${(selfReflection || "（未記入）").replace(/\n/g, "<br>")}</div>
+      </div>`;
   }
   box.innerHTML = html;
   box.style.display = "block";
