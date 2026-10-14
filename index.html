@@ -218,6 +218,8 @@ canvas#radarChart { max-height: 380px; }
 @media print {
   body { background: #fff; }
   .app-header, .progress-bar, .btn, .q-nav, #step1, #step2, #step3-nav, .send-area { display: none !important; }
+  .autosave-hint, #sendStatus { display: none !important; }
+  .comment-box, .goal-box { border: none !important; padding: 0 !important; resize: none !important; min-height: 0 !important; overflow: visible !important; }
   .step { display: block !important; }
   #step1, #step2 { display: none !important; }
   #step3 { display: block !important; }
@@ -319,24 +321,24 @@ canvas#radarChart { max-height: 380px; }
 
     <!-- 個人目標（成長の余白に対して） -->
     <div class="comment-area" id="goalArea" style="display:none;">
-      <label style="margin-bottom:4px;">個人目標　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label style="margin-bottom:4px;">個人目標　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <p style="font-size:11px;color:var(--muted);margin:0 0 12px;">「成長の余白」について、次に取り組みたいことを書いてください。</p>
       <div id="goalFields"></div>
     </div>
 
     <!-- 半期の個人目標／本人の振り返り（自己診断モードのみ） -->
     <div class="comment-area" id="termGoalArea" style="display:none;">
-      <label for="termGoalBox">半期の個人目標　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
-      <textarea class="comment-box" id="termGoalBox" placeholder="この期間で取り組みたい目標・チャレンジを書いてください…"></textarea>
+      <label for="termGoalBox">半期の個人目標　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <textarea class="comment-box" id="termGoalBox" placeholder="取り組みたい目標・チャレンジを書いてください…"></textarea>
     </div>
     <div class="comment-area" id="selfReflectionArea" style="display:none;">
-      <label for="selfReflectionBox">本人の振り返り　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label for="selfReflectionBox">本人の振り返り　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="selfReflectionBox" placeholder="これまでの期間を振り返って、できたこと・できなかったことを書いてください…"></textarea>
     </div>
 
     <!-- 面談前メモ -->
     <div class="comment-area">
-      <label for="commentBox">面談前の一言メモ　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label for="commentBox">面談前の一言メモ　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
     </div>
 
@@ -534,6 +536,20 @@ function selectAnswer(val) {
   if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
   autoAdvanceTimer = setTimeout(() => { nextQ(); }, 350);
 }
+
+// 印刷時、テキストエリアの枠線を消して「書きかけ」感をなくし、
+// 中身が省略されないよう入力欄の高さを内容に合わせて広げる（印刷後に元へ戻す）
+window.addEventListener("beforeprint", function() {
+  document.querySelectorAll(".comment-box, .goal-box").forEach(function(el) {
+    el.dataset.printPrevHeight = el.style.height || "";
+    el.style.height = el.scrollHeight + "px";
+  });
+});
+window.addEventListener("afterprint", function() {
+  document.querySelectorAll(".comment-box, .goal-box").forEach(function(el) {
+    el.style.height = el.dataset.printPrevHeight || "";
+  });
+});
 
 document.addEventListener("keydown", function(e) {
   if (!document.getElementById("step2").classList.contains("active")) return;
@@ -734,7 +750,19 @@ function renderGoalFields(growthItems) {
 // ─────────────────────────────────────────
 // GAS送信
 // ─────────────────────────────────────────
-// メモ欄：書いて他をさわった時点で自動保存する
+// メモ欄：書いて他をさわった時点（blur）に加えて、入力が止まってからも
+// 自動保存する（最後の欄のまま離脱されると blur が一度も起きず保存されないため）
+let autosaveDebounceTimer = null;
+function scheduleAutosave(box, getLastSent) {
+  clearTimeout(autosaveDebounceTimer);
+  autosaveDebounceTimer = setTimeout(function() {
+    if (box.value === getLastSent()) return;
+    if (!lastSentAnswers) return;   // まだ一度も記録されていないときは何もしない
+    submitted = false;
+    sendToGAS();
+  }, 1200);
+}
+
 document.addEventListener("DOMContentLoaded", function() {
   const box = document.getElementById("commentBox");
   if (!box) return;
@@ -744,6 +772,9 @@ document.addEventListener("DOMContentLoaded", function() {
     submitted = false;
     sendToGAS();
   });
+  box.addEventListener("input", function() {
+    scheduleAutosave(box, function() { return lastSentComment; });
+  });
 
   const termGoalBox = document.getElementById("termGoalBox");
   if (termGoalBox) {
@@ -752,6 +783,9 @@ document.addEventListener("DOMContentLoaded", function() {
       if (!lastSentAnswers) return;
       submitted = false;
       sendToGAS();
+    });
+    termGoalBox.addEventListener("input", function() {
+      scheduleAutosave(termGoalBox, function() { return lastSentTermGoal; });
     });
   }
 
@@ -763,7 +797,39 @@ document.addEventListener("DOMContentLoaded", function() {
       submitted = false;
       sendToGAS();
     });
+    selfReflectionBox.addEventListener("input", function() {
+      scheduleAutosave(selfReflectionBox, function() { return lastSentSelfReflection; });
+    });
   }
+
+  // ページを閉じる／離れる瞬間の最終フラッシュ（デバウンスのタイマーが
+  // 発火する前に離脱された場合の保険。sendBeaconは離脱中でも送信を保証する）
+  window.addEventListener("pagehide", function() {
+    if (isManagerMode) return;      // 上長モードの面談前メモは別仕様のため対象外
+    if (!lastSentAnswers) return;   // 一度も記録されていなければ送る意味がない
+    const dirty =
+      (box && box.value !== lastSentComment) ||
+      (termGoalBox && termGoalBox.value !== lastSentTermGoal) ||
+      (selfReflectionBox && selfReflectionBox.value !== lastSentSelfReflection);
+    if (!dirty) return;
+    const payload = {
+      timestamp: new Date().toISOString(),
+      name: userName,
+      dept: userDept,
+      comment: box.value,
+      scores: calcScores(),
+      judges: new Array(8).fill(""),
+      type: "self",
+      target_name: "",
+      token: selfToken,
+      manager_url: buildManagerUrl(selfToken, userName),
+      goal1_cap: goalCaps[0] || "", goal1_text: goalTexts[0] || "",
+      goal2_cap: goalCaps[1] || "", goal2_text: goalTexts[1] || "",
+      term_goal: termGoalBox ? termGoalBox.value : "",
+      self_reflection: selfReflectionBox ? selfReflectionBox.value : "",
+    };
+    navigator.sendBeacon(GAS_URL, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+  });
 });
 
 function lockSendButton() {
