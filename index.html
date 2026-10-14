@@ -218,7 +218,7 @@ canvas#radarChart { max-height: 380px; }
 @media print {
   body { background: #fff; }
   .app-header, .progress-bar, .btn, .q-nav, #step1, #step2, #step3-nav, .send-area { display: none !important; }
-  .autosave-hint, #sendStatus { display: none !important; }
+  .autosave-hint, #sendStatus, .no-print { display: none !important; }
   .comment-box, .goal-box { border: none !important; padding: 0 !important; resize: none !important; min-height: 0 !important; overflow: visible !important; }
   .step { display: block !important; }
   #step1, #step2 { display: none !important; }
@@ -469,6 +469,7 @@ let lastSentTermGoal = "";        // 自動送信ずみの「半期の個人目�
 let lastSentSelfReflection = "";  // 自動送信ずみの「本人の振り返り」
 let gasSendInFlight = false;  // GASへの送信が進行中か（複数欄の同時編集で上書き事故を防ぐ）
 let gasSendQueued = false;    // 送信中にさらに編集があった場合、完了後にもう一度送り直すフラグ
+let lastManagerScores = null; // 上長評価モード：本人データの再取得ボタン用に、自分の送信スコアを覚えておく
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -817,9 +818,12 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // ページを閉じる／離れる瞬間の最終フラッシュ（デバウンスのタイマーが
-  // 発火する前に離脱された場合の保険。sendBeaconは離脱中でも送信を保証する）
-  window.addEventListener("pagehide", function() {
+  // 離脱・タブ切り替え時の最終フラッシュ（デバウンスのタイマーが発火する前に
+  // 離脱／裏に回られた場合の保険。sendBeaconは離脱中でも送信を保証する）
+  // ・pagehide … タブを閉じる／別URLへ移動する場合に発火
+  // ・visibilitychange(hidden) … タブは閉じず、別タブへ切り替えて裏に回った場合に発火
+  //   （上長用URLを別タブで開く運用があるため、pagehideだけでは拾えない）
+  function flushPendingComment() {
     if (isManagerMode) return;      // 上長モードの面談前メモは別仕様のため対象外
     if (!lastSentAnswers) return;   // 一度も記録されていなければ送る意味がない
     const dirty =
@@ -844,6 +848,14 @@ document.addEventListener("DOMContentLoaded", function() {
       self_reflection: selfReflectionBox ? selfReflectionBox.value : "",
     };
     navigator.sendBeacon(GAS_URL, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+    // 送信済み扱いにして、同じ内容で二重送信しないようにする
+    lastSentComment = box.value;
+    if (termGoalBox) lastSentTermGoal = termGoalBox.value;
+    if (selfReflectionBox) lastSentSelfReflection = selfReflectionBox.value;
+  }
+  window.addEventListener("pagehide", flushPendingComment);
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "hidden") flushPendingComment();
   });
 });
 
@@ -925,6 +937,7 @@ function sendToGAS() {
         statusEl.textContent = `✓ 記録しました。「${targetName}」さんの自己評価と重ねて表示しています。`;
       } else {
         statusEl.textContent = "✓ 記録しました。本人の自己評価を探しています…";
+        lastManagerScores = scores;
         fetchSelfScoreAndOverlay(scores);
       }
     } else {
@@ -1042,6 +1055,16 @@ function applyLockUI(lockName, lockDept) {
 // ─────────────────────────────────────────
 // 上長評価：自己評価データ取得・チャート重ね表示（機能2）
 // ─────────────────────────────────────────
+// 「↻ 本人データを再取得」ボタン：本人が後から書き足した場合に、上長側から
+// 手動で最新データを取りに行くための保険（自動取得は上長の送信時に一度だけのため）
+function refetchSelfInput() {
+  if (!urlToken) return;
+  const statusEl = document.getElementById("sendStatus");
+  statusEl.className = "send-status ok";
+  statusEl.textContent = "本人の最新データを再取得しています…";
+  fetchSelfScoreAndOverlay(lastManagerScores || new Array(8).fill(0));
+}
+
 function fetchSelfScoreAndOverlay(managerScores) {
   const statusEl = document.getElementById("sendStatus");
   const cbName = "gasCallback_" + Date.now();
@@ -1190,7 +1213,10 @@ function renderSelfInputDisplay(result) {
   const termGoal = (result.term_goal || "").trim();
   const selfReflection = (result.self_reflection || "").trim();
 
-  let html = `<label style="margin-bottom:10px;">本人の面談前メモ・個人目標</label>`;
+  let html = `<label style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">`
+    + `<span>本人の面談前メモ・個人目標</span>`
+    + `<button type="button" onclick="refetchSelfInput()" style="font-size:11px;padding:4px 10px;border:1px solid #c0cfe8;border-radius:4px;background:#fff;cursor:pointer;" class="no-print">↻ 本人データを再取得</button>`
+    + `</label>`;
   html += `<div style="font-size:12px;color:#333;line-height:1.7;margin-bottom:${goals.length ? "14px" : "0"};">`
     + (comment ? comment.replace(/\n/g, "<br>") : "（本人のメモはまだ書かれていません）")
     + `</div>`;
