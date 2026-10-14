@@ -224,9 +224,24 @@ canvas#radarChart { max-height: 380px; }
   #step1, #step2 { display: none !important; }
   #step3 { display: block !important; }
   .container { padding: 0; max-width: none; }
-  .chart-wrap { page-break-inside: avoid; }
+
+  /* 欄の途中でページが割れて次ページに数行だけはみ出るのを防ぐ（箱ごと次ページへ送る） */
+  .chart-wrap, .card, .comment-area, .analysis-item, #selfInputDisplay {
+    page-break-inside: avoid; break-inside: avoid;
+  }
+
+  /* 余白・チャートを詰めて、裏表1枚（2ページ）に収まりやすくする */
+  .chart-wrap { margin-bottom: 8px; padding: 10px; }
+  canvas#radarChart { max-height: 260px !important; }
+  .result-table { margin-bottom: 8px; }
+  .result-table th, .result-table td { padding: 4px 8px; }
+  .analysis-box { margin-bottom: 8px; }
+  .analysis-item { padding: 8px; }
+  .comment-area { margin-bottom: 8px; padding: 10px; }
+  #resultSummary { margin-bottom: 8px; }
+
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  @page { size: A4 portrait; margin: 12mm 14mm; }
+  @page { size: A4 portrait; margin: 10mm 14mm; }
 }
 </style>
 </head>
