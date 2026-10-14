@@ -357,6 +357,8 @@ canvas#radarChart { max-height: 380px; }
       <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
     </div>
 
+    <button class="btn btn-primary" id="finalizeBtn" style="display:none;width:100%;margin-bottom:16px;" onclick="finalizeSelfInput()">✓ 入力を完了して上長用URLを発行する</button>
+
     <div id="step3-nav" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
       <button class="btn btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">🖨 印刷 / PDF保存</button>
       <button class="btn btn-secondary" onclick="resetAll()">← はじめからやり直す</button>
@@ -470,6 +472,7 @@ let lastSentSelfReflection = "";  // 自動送信ずみの「本人の振り返�
 let gasSendInFlight = false;  // GASへの送信が進行中か（複数欄の同時編集で上書き事故を防ぐ）
 let gasSendQueued = false;    // 送信中にさらに編集があった場合、完了後にもう一度送り直すフラグ
 let lastManagerScores = null; // 上長評価モード：本人データの再取得ボタン用に、自分の送信スコアを覚えておく
+let managerUrlRequested = false; // 「入力を完了して上長用URLを発行する」が押されたか（押すまでURLは出さない）
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -720,6 +723,7 @@ function showResult() {
     // renderGoalFields(growthItems);
     document.getElementById("termGoalArea").style.display = "block";
     document.getElementById("selfReflectionArea").style.display = "block";
+    document.getElementById("finalizeBtn").style.display = "block";
   }
 
   // 結果が出た時点で自動的に記録する（送信ボタンは廃止）
@@ -859,6 +863,19 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 
+// 「入力を完了して上長用URLを発行する」ボタン：ここを押すまでは上長用URLを
+// 出さない。自動保存の途中(入力途中の文字)や、デバウンス・タブ切替の
+// タイミング競合を気にせず、本人がはっきり「書き終わった」と意思表示した
+// 瞬間の内容だけをURL発行の起点にするための、明示的な区切り。
+function finalizeSelfInput() {
+  managerUrlRequested = true;
+  submitted = false;
+  const statusEl = document.getElementById("sendStatus");
+  statusEl.className = "send-status";
+  statusEl.textContent = "送信中…";
+  sendToGAS();
+}
+
 function lockSendButton() {
   const btn = document.querySelector("#step3-nav .btn-accent") ||
               document.querySelector("button[onclick='sendToGAS()']");
@@ -940,10 +957,13 @@ function sendToGAS() {
         lastManagerScores = scores;
         fetchSelfScoreAndOverlay(scores);
       }
-    } else {
+    } else if (managerUrlRequested) {
       statusEl.className = "send-status ok";
       statusEl.textContent = "✓ 記録しました。下の上長評価用URLを、ご自身の上長へ送ってください。";
       showManagerUrlBox();
+    } else {
+      statusEl.className = "send-status ok";
+      statusEl.textContent = "✓ 自動保存しました（上長用URLは「入力を完了して発行する」を押すと表示されます）。";
     }
   })
   .catch(() => {
@@ -982,6 +1002,8 @@ function resetAll() {
   goalCaps = [""]; goalTexts = [""]; lastSentGoals = "";
   lastSentTermGoal = ""; lastSentSelfReflection = "";
   gasSendInFlight = false; gasSendQueued = false;
+  managerUrlRequested = false;
+  document.getElementById("finalizeBtn").style.display = "none";
   document.getElementById("goalArea").style.display = "none";
   document.getElementById("goalFields").innerHTML = "";
   document.getElementById("termGoalArea").style.display = "none";
