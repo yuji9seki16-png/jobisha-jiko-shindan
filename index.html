@@ -317,26 +317,26 @@ canvas#radarChart { max-height: 380px; }
     <!-- 本人の面談前メモ・個人目標（上長評価モードで、本人の自己評価と重ねて表示できた時のみ表示） -->
     <div class="comment-area" id="selfInputDisplay" style="display:none;background:#f7f9fc;"></div>
 
-    <!-- 個人目標（成長の余白2つに対して） -->
+    <!-- 個人目標（成長の余白に対して） -->
     <div class="comment-area" id="goalArea" style="display:none;">
-      <label style="margin-bottom:4px;">個人目標（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
-      <p style="font-size:11px;color:var(--muted);margin:0 0 12px;">「成長の余白」の2つについて、次に取り組みたいことを書いてください。</p>
+      <label style="margin-bottom:4px;">個人目標　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 12px;">「成長の余白」について、次に取り組みたいことを書いてください。</p>
       <div id="goalFields"></div>
     </div>
 
-    <!-- 上期・下期の目標／本人の振り返り（自己診断モードのみ） -->
+    <!-- 半期の個人目標／本人の振り返り（自己診断モードのみ） -->
     <div class="comment-area" id="termGoalArea" style="display:none;">
-      <label for="termGoalBox">上期・下期の目標（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label for="termGoalBox">半期の個人目標　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="termGoalBox" placeholder="この期間で取り組みたい目標・チャレンジを書いてください…"></textarea>
     </div>
     <div class="comment-area" id="selfReflectionArea" style="display:none;">
-      <label for="selfReflectionBox">本人の振り返り（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label for="selfReflectionBox">本人の振り返り　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="selfReflectionBox" placeholder="これまでの期間を振り返って、できたこと・できなかったことを書いてください…"></textarea>
     </div>
 
     <!-- 面談前メモ -->
     <div class="comment-area">
-      <label for="commentBox">面談前の一言メモ（任意）　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label for="commentBox">面談前の一言メモ　<span style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
     </div>
 
@@ -445,11 +445,13 @@ let targetName = "";
 let autoAdvanceTimer = null;
 let selfToken = "";  // 自己評価送信時に発行する認証トークン（上長評価URLに埋め込む）
 let urlToken = "";   // 上長評価モードでURLから受け取ったトークン
-let goalCaps = ["", ""];   // 個人目標の対象能力名（成長の余白2つ）
-let goalTexts = ["", ""];  // 個人目標の内容
+let goalCaps = [""];   // 個人目標の対象能力名（成長の余白1つ）
+let goalTexts = [""];  // 個人目標の内容
 let lastSentGoals = "";    // 自動送信ずみの個人目標
-let lastSentTermGoal = "";        // 自動送信ずみの「上期・下期の目標」
+let lastSentTermGoal = "";        // 自動送信ずみの「半期の個人目標」
 let lastSentSelfReflection = "";  // 自動送信ずみの「本人の振り返り」
+let gasSendInFlight = false;  // GASへの送信が進行中か（複数欄の同時編集で上書き事故を防ぐ）
+let gasSendQueued = false;    // 送信中にさらに編集があった場合、完了後にもう一度送り直すフラグ
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -661,29 +663,29 @@ function showResult() {
   });
   document.getElementById("resultTableBody").innerHTML = tableHTML;
 
-  // 分析テキスト（素点の上位2つ・下位2つ）
+  // 分析テキスト（素点の上位1つ・下位1つ）
   const ranked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: scores[i], idx: i, type: cap.type }))
     .sort((a, b) => b.score - a.score);
-  const strengthItems = ranked.slice(0, 2);
-  const growthItems = ranked.slice(-2).reverse();
+  const strengthItems = ranked.slice(0, 1);
+  const growthItems = ranked.slice(-1);
 
   const strengthText = strengthItems.map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
   const growthText = growthItems.map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
 
   document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
-      <h4 id="strengthHeading">強み仮説（スコア上位2つ）</h4>
+      <h4 id="strengthHeading">強み仮説（スコア上位1つ）</h4>
       <p>${strengthText}</p>
     </div>
     <div class="analysis-item">
-      <h4 id="growthHeading">成長の余白（スコア下位2つ）</h4>
+      <h4 id="growthHeading">成長の余白（スコア下位1つ）</h4>
       <p>${growthText}</p>
     </div>
   `;
 
-  // 個人目標欄（自己診断モードのみ・成長の余白2つに対して書く）
+  // 個人目標欄（自己診断モードのみ・成長の余白に対して書く）※いったん非表示（2026-10-14）
   if (!isManagerMode) {
-    renderGoalFields(growthItems);
+    // renderGoalFields(growthItems);
     document.getElementById("termGoalArea").style.display = "block";
     document.getElementById("selfReflectionArea").style.display = "block";
   }
@@ -695,7 +697,7 @@ function showResult() {
 }
 
 // ─────────────────────────────────────────
-// 個人目標欄（成長の余白2つに対して書く）
+// 個人目標欄（成長の余白に対して書く）
 // ─────────────────────────────────────────
 function renderGoalFields(growthItems) {
   const area = document.getElementById("goalArea");
@@ -771,6 +773,12 @@ function lockSendButton() {
 }
 
 function sendToGAS() {
+  // 複数の欄をほぼ同時に編集すると、送信中の古いデータが後から完了して
+  // 新しいデータを上書きしてしまうことがあるため、送信中は次の送信を予約するだけにする
+  if (gasSendInFlight) {
+    gasSendQueued = true;
+    return;
+  }
   if (submitted) return;  // 二重送信防止
 
   const statusEl = document.getElementById("sendStatus");
@@ -815,6 +823,8 @@ function sendToGAS() {
     return;
   }
 
+  gasSendInFlight = true;
+
   fetch(GAS_URL, {
     method: "POST",
     mode: "no-cors",
@@ -846,6 +856,15 @@ function sendToGAS() {
     submitted = false;  // 送信失敗時はフラグを戻す（リトライ可能に）
     statusEl.className = "send-status err";
     statusEl.textContent = "送信に失敗しました。ネットワーク接続を確認してください。";
+  })
+  .finally(() => {
+    gasSendInFlight = false;
+    if (gasSendQueued) {
+      // 送信中に別の欄が編集されていた場合は、最新の内容で送り直す
+      gasSendQueued = false;
+      submitted = false;
+      sendToGAS();
+    }
   });
 }
 
@@ -866,8 +885,9 @@ function resetAll() {
   userName = ""; userDept = "";
   submitted = false;
   selfToken = ""; lastSentAnswers = ""; lastSentComment = ""; overlayDone = false;
-  goalCaps = ["", ""]; goalTexts = ["", ""]; lastSentGoals = "";
+  goalCaps = [""]; goalTexts = [""]; lastSentGoals = "";
   lastSentTermGoal = ""; lastSentSelfReflection = "";
+  gasSendInFlight = false; gasSendQueued = false;
   document.getElementById("goalArea").style.display = "none";
   document.getElementById("goalFields").innerHTML = "";
   document.getElementById("termGoalArea").style.display = "none";
@@ -1036,21 +1056,21 @@ function overlayManagerChart(managerScores, selfScores) {
   // 「強み仮説／成長の余白」を上長評価・自己評価の2列で並べ、すり合わせしやすくする
   const managerRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: managerScores[i] }))
     .sort((a, b) => b.score - a.score);
-  const managerStrengthText = managerRanked.slice(0, 2)
+  const managerStrengthText = managerRanked.slice(0, 1)
     .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
-  const managerGrowthText = managerRanked.slice(-2).reverse()
+  const managerGrowthText = managerRanked.slice(-1)
     .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
 
   const selfRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: selfScores[i] }))
     .sort((a, b) => b.score - a.score);
-  const selfStrengthText = selfRanked.slice(0, 2)
+  const selfStrengthText = selfRanked.slice(0, 1)
     .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
-  const selfGrowthText = selfRanked.slice(-2).reverse()
+  const selfGrowthText = selfRanked.slice(-1)
     .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
 
   document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
-      <h4>強み仮説（上位2つ）</h4>
+      <h4>強み仮説（上位1つ）</h4>
       <div class="compare-cols">
         <div class="compare-col compare-col-manager">
           <div class="compare-col-label">上長評価</div>
@@ -1063,7 +1083,7 @@ function overlayManagerChart(managerScores, selfScores) {
       </div>
     </div>
     <div class="analysis-item">
-      <h4>成長の余白（下位2つ）</h4>
+      <h4>成長の余白（下位1つ）</h4>
       <div class="compare-cols">
         <div class="compare-col compare-col-manager">
           <div class="compare-col-label">上長評価</div>
@@ -1100,17 +1120,15 @@ function renderSelfInputDisplay(result) {
         <div style="font-size:12px;color:#333;line-height:1.6;">${(g.text || "（未記入）").replace(/\n/g, "<br>")}</div>
       </div>`).join("");
   }
-  if (termGoal || selfReflection) {
-    html += `
-      <div style="margin-bottom:8px;">
-        <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">上期・下期の目標</div>
-        <div style="font-size:12px;color:#333;line-height:1.6;">${(termGoal || "（未記入）").replace(/\n/g, "<br>")}</div>
-      </div>
-      <div style="margin-bottom:8px;">
-        <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">本人の振り返り</div>
-        <div style="font-size:12px;color:#333;line-height:1.6;">${(selfReflection || "（未記入）").replace(/\n/g, "<br>")}</div>
-      </div>`;
-  }
+  html += `
+    <div style="margin-bottom:8px;">
+      <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">半期の個人目標</div>
+      <div style="font-size:12px;color:#333;line-height:1.6;">${(termGoal || "（未記入）").replace(/\n/g, "<br>")}</div>
+    </div>
+    <div style="margin-bottom:8px;">
+      <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">本人の振り返り</div>
+      <div style="font-size:12px;color:#333;line-height:1.6;">${(selfReflection || "（未記入）").replace(/\n/g, "<br>")}</div>
+    </div>`;
   box.innerHTML = html;
   box.style.display = "block";
 }
