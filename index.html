@@ -334,6 +334,18 @@ canvas#radarChart { max-height: 380px; }
     <!-- 本人の面談前メモ・個人目標（上長評価モードで、本人の自己評価と重ねて表示できた時のみ表示） -->
     <div class="comment-area" id="selfInputDisplay" style="display:none;background:#f7f9fc;"></div>
 
+    <!-- 面談用の記入欄（面談用URLモードのみ表示） -->
+    <div class="comment-area" id="interviewFieldsArea" style="display:none;">
+      <label for="interviewMemoBox">振り返り　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <textarea class="comment-box" id="interviewMemoBox" placeholder="面談で話したことを書いてください…"></textarea>
+
+      <label for="nextTermGoalBox" style="margin-top:14px;">次の半期に合意した目標</label>
+      <textarea class="comment-box" id="nextTermGoalBox" placeholder="次の半期に向けて合意した目標を書いてください…"></textarea>
+
+      <label for="interviewNotesBox" style="margin-top:14px;">その他（家庭の事情など）</label>
+      <textarea class="comment-box" id="interviewNotesBox" placeholder="その他、共有しておきたいことがあれば書いてください…"></textarea>
+    </div>
+
     <!-- 個人目標（成長の余白に対して） -->
     <div class="comment-area" id="goalArea" style="display:none;">
       <label style="margin-bottom:4px;">個人目標　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
@@ -361,6 +373,7 @@ canvas#radarChart { max-height: 380px; }
 
     <div id="step3-nav" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
       <button class="btn btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">🖨 印刷 / PDF保存</button>
+      <button class="btn btn-secondary" id="interviewUrlBtn" style="display:none;" onclick="showInterviewUrlBox()">📋 面談用URLを発行</button>
       <button class="btn btn-secondary" onclick="resetAll()">← はじめからやり直す</button>
     </div>
     <div class="send-status" id="sendStatus"></div>
@@ -372,6 +385,16 @@ canvas#radarChart { max-height: 380px; }
         <button onclick="copyManagerUrl()"
           style="white-space:nowrap;background:#1a1a1a;color:#fff;border:none;border-radius:3px;padding:6px 14px;font-size:12px;cursor:pointer;"
           id="copyUrlBtn">コピー</button>
+      </div>
+    </div>
+    <div id="interviewUrlBox" style="display:none;margin-top:12px;background:#f0fff4;border:1px solid #bfe3c7;border-radius:4px;padding:14px 16px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;">📋 面談用URL（面談当日、この場で開いて記入します）</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="interviewUrlText" type="text" readonly
+          style="flex:1;font-size:11px;font-family:monospace;background:#fff;border:1px solid #ccc;border-radius:3px;padding:6px 8px;color:#333;">
+        <button onclick="copyInterviewUrl()"
+          style="white-space:nowrap;background:#1a1a1a;color:#fff;border:none;border-radius:3px;padding:6px 14px;font-size:12px;cursor:pointer;"
+          id="copyInterviewUrlBtn">コピー</button>
       </div>
     </div>
     <div class="send-area" style="margin-top:8px;font-size:11px;color:#888;">
@@ -473,6 +496,12 @@ let gasSendInFlight = false;  // GASへの送信が進行中か（複数欄の�
 let gasSendQueued = false;    // 送信中にさらに編集があった場合、完了後にもう一度送り直すフラグ
 let lastManagerScores = null; // 上長評価モード：本人データの再取得ボタン用に、自分の送信スコアを覚えておく
 let managerUrlRequested = false; // 「入力を完了して上長用URLを発行する」が押されたか（押すまでURLは出さない）
+let isInterviewMode = false;  // 面談用URL画面か（本人・上長の既存データを表示し、面談メモを記入する専用モード）
+let interviewContextLoaded = false; // 面談用URLでトークンからデータを取得できたか（できる前は自動保存しない）
+let interviewSelfScores = null;     // 面談記録を送る際に添えるスコア（本人のスコアをそのまま使う）
+let lastSentInterviewMemo = "";
+let lastSentNextTermGoal = "";
+let lastSentInterviewNotes = "";
 
 // ─────────────────────────────────────────
 // STEP 1 → STEP 2
@@ -617,7 +646,10 @@ function calcScores() {
 // ─────────────────────────────────────────
 function showResult() {
   showStep(3);
-  if (isManagerMode) document.getElementById("printBtn").style.display = "";
+  if (isManagerMode) {
+    document.getElementById("printBtn").style.display = "";
+    document.getElementById("interviewUrlBtn").style.display = "";
+  }
   document.getElementById("progressFill").style.width = "100%";
   document.getElementById("stepLabel").textContent = "STEP 3 / 3 ─ 結果";
 
@@ -777,7 +809,7 @@ function scheduleAutosave(box, getLastSent) {
   clearTimeout(autosaveDebounceTimer);
   autosaveDebounceTimer = setTimeout(function() {
     if (box.value === getLastSent()) return;
-    if (!lastSentAnswers) return;   // まだ一度も記録されていないときは何もしない
+    if (!lastSentAnswers && !interviewContextLoaded) return;   // まだ一度も記録されていないときは何もしない
     submitted = false;
     sendToGAS();
   }, 1200);
@@ -861,6 +893,80 @@ document.addEventListener("DOMContentLoaded", function() {
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "hidden") flushPendingComment();
   });
+
+  // 面談用URL画面の3欄（振り返り／次の半期目標／その他）も同じ自動保存の仕組みに乗せる
+  const interviewMemoBox   = document.getElementById("interviewMemoBox");
+  const nextTermGoalBox    = document.getElementById("nextTermGoalBox");
+  const interviewNotesBox  = document.getElementById("interviewNotesBox");
+
+  if (interviewMemoBox) {
+    interviewMemoBox.addEventListener("blur", function() {
+      if (this.value === lastSentInterviewMemo) return;
+      if (!interviewContextLoaded) return;
+      submitted = false;
+      sendToGAS();
+    });
+    interviewMemoBox.addEventListener("input", function() {
+      scheduleAutosave(interviewMemoBox, function() { return lastSentInterviewMemo; });
+    });
+  }
+  if (nextTermGoalBox) {
+    nextTermGoalBox.addEventListener("blur", function() {
+      if (this.value === lastSentNextTermGoal) return;
+      if (!interviewContextLoaded) return;
+      submitted = false;
+      sendToGAS();
+    });
+    nextTermGoalBox.addEventListener("input", function() {
+      scheduleAutosave(nextTermGoalBox, function() { return lastSentNextTermGoal; });
+    });
+  }
+  if (interviewNotesBox) {
+    interviewNotesBox.addEventListener("blur", function() {
+      if (this.value === lastSentInterviewNotes) return;
+      if (!interviewContextLoaded) return;
+      submitted = false;
+      sendToGAS();
+    });
+    interviewNotesBox.addEventListener("input", function() {
+      scheduleAutosave(interviewNotesBox, function() { return lastSentInterviewNotes; });
+    });
+  }
+
+  function flushPendingInterview() {
+    if (!isInterviewMode) return;
+    if (!interviewContextLoaded) return;
+    const dirty =
+      (interviewMemoBox && interviewMemoBox.value !== lastSentInterviewMemo) ||
+      (nextTermGoalBox && nextTermGoalBox.value !== lastSentNextTermGoal) ||
+      (interviewNotesBox && interviewNotesBox.value !== lastSentInterviewNotes);
+    if (!dirty) return;
+    const payload = {
+      timestamp: new Date().toISOString(),
+      name: targetName,
+      dept: "",
+      comment: "",
+      scores: interviewSelfScores || new Array(8).fill(0),
+      judges: new Array(8).fill(""),
+      type: "interview",
+      target_name: targetName,
+      token: urlToken,
+      manager_url: "",
+      goal1_cap: "", goal1_text: "", goal2_cap: "", goal2_text: "",
+      term_goal: "", self_reflection: "",
+      interview_memo: interviewMemoBox ? interviewMemoBox.value : "",
+      next_term_goal: nextTermGoalBox ? nextTermGoalBox.value : "",
+      interview_notes: interviewNotesBox ? interviewNotesBox.value : "",
+    };
+    navigator.sendBeacon(GAS_URL, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+    if (interviewMemoBox) lastSentInterviewMemo = interviewMemoBox.value;
+    if (nextTermGoalBox) lastSentNextTermGoal = nextTermGoalBox.value;
+    if (interviewNotesBox) lastSentInterviewNotes = interviewNotesBox.value;
+  }
+  window.addEventListener("pagehide", flushPendingInterview);
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "hidden") flushPendingInterview();
+  });
 });
 
 // 「入力を完了して上長用URLを発行する」ボタン：ここを押すまでは上長用URLを
@@ -895,9 +1001,9 @@ function sendToGAS() {
   statusEl.className = "send-status";
   statusEl.textContent = "送信中…";
 
-  const scores = calcScores();
+  const scores = isInterviewMode ? (interviewSelfScores || new Array(8).fill(0)) : calcScores();
 
-  if (!isManagerMode && !selfToken) {
+  if (!isManagerMode && !isInterviewMode && !selfToken) {
     // 認証トークンは最初の記録で一度だけ発行する（他人からの推測を防ぐ）
     // 答え直して記録し直しても同じトークンを使うので、上長へ渡したURLはそのまま使える
     selfToken = (window.crypto && crypto.randomUUID)
@@ -907,19 +1013,22 @@ function sendToGAS() {
 
   const payload = {
     timestamp: new Date().toISOString(),
-    name: userName,
-    dept: userDept,
+    name: isInterviewMode ? targetName : userName,
+    dept: isInterviewMode ? "" : userDept,
     comment: document.getElementById("commentBox").value,
     scores: scores,
     judges: new Array(8).fill(""), // スプレッドシートの列位置合わせ用（判定機能は廃止済み・表示なし）
-    type: isManagerMode ? "manager" : "self",
-    target_name: isManagerMode ? targetName : "",
-    token: isManagerMode ? urlToken : selfToken,
-    manager_url: isManagerMode ? "" : buildManagerUrl(selfToken, userName),
+    type: isInterviewMode ? "interview" : (isManagerMode ? "manager" : "self"),
+    target_name: (isManagerMode || isInterviewMode) ? targetName : "",
+    token: (isManagerMode || isInterviewMode) ? urlToken : selfToken,
+    manager_url: (isManagerMode || isInterviewMode) ? "" : buildManagerUrl(selfToken, userName),
     goal1_cap: goalCaps[0] || "", goal1_text: goalTexts[0] || "",
     goal2_cap: goalCaps[1] || "", goal2_text: goalTexts[1] || "",
     term_goal: isManagerMode ? "" : (document.getElementById("termGoalBox") ? document.getElementById("termGoalBox").value : ""),
     self_reflection: isManagerMode ? "" : (document.getElementById("selfReflectionBox") ? document.getElementById("selfReflectionBox").value : ""),
+    interview_memo: isInterviewMode && document.getElementById("interviewMemoBox") ? document.getElementById("interviewMemoBox").value : "",
+    next_term_goal: isInterviewMode && document.getElementById("nextTermGoalBox") ? document.getElementById("nextTermGoalBox").value : "",
+    interview_notes: isInterviewMode && document.getElementById("interviewNotesBox") ? document.getElementById("interviewNotesBox").value : "",
   };
 
   // GAS_URLが設定前の場合はデモメッセージ
@@ -948,7 +1057,13 @@ function sendToGAS() {
     lastSentGoals = goalTexts.join("||");
     if (document.getElementById("termGoalBox")) lastSentTermGoal = document.getElementById("termGoalBox").value;
     if (document.getElementById("selfReflectionBox")) lastSentSelfReflection = document.getElementById("selfReflectionBox").value;
-    if (isManagerMode) {
+    if (document.getElementById("interviewMemoBox")) lastSentInterviewMemo = document.getElementById("interviewMemoBox").value;
+    if (document.getElementById("nextTermGoalBox")) lastSentNextTermGoal = document.getElementById("nextTermGoalBox").value;
+    if (document.getElementById("interviewNotesBox")) lastSentInterviewNotes = document.getElementById("interviewNotesBox").value;
+    if (isInterviewMode) {
+      statusEl.className = "send-status ok";
+      statusEl.textContent = "✓ 記録しました。";
+    } else if (isManagerMode) {
       statusEl.className = "send-status ok";
       if (overlayDone) {
         statusEl.textContent = `✓ 記録しました。「${targetName}」さんの自己評価と重ねて表示しています。`;
@@ -1030,9 +1145,15 @@ function resetAll() {
 // ─────────────────────────────────────────
 function initFromURL() {
   const p = new URLSearchParams(window.location.search);
-  isManagerMode = p.get("mode") === "manager";
+  isManagerMode   = p.get("mode") === "manager";
+  isInterviewMode = p.get("mode") === "interview";
   targetName    = p.get("target") || "";  // 表示用のみ。データ取得・検証には使わない
   urlToken      = p.get("token") || "";   // 実際の認証はこちら
+
+  if (isInterviewMode) {
+    loadInterviewView();
+    return;
+  }
 
   if (p.get("name"))  document.getElementById("inputName").value  = p.get("name");
   if (p.get("dept"))  document.getElementById("inputDept").value  = p.get("dept");
@@ -1281,6 +1402,122 @@ function copyManagerUrl() {
     btn.textContent = "✓ コピーしました";
     setTimeout(() => { btn.textContent = "コピー"; }, 2000);
   });
+}
+
+// ─────────────────────────────────────────
+// 面談用URL（上長評価モードから発行。同じトークンを使い続ける）
+// ─────────────────────────────────────────
+function buildInterviewUrl(token, name) {
+  const base = window.location.origin + window.location.pathname;
+  return `${base}?mode=interview&token=${encodeURIComponent(token)}&target=${encodeURIComponent(name)}`;
+}
+
+function showInterviewUrlBox() {
+  const url = buildInterviewUrl(urlToken, targetName);
+  document.getElementById("interviewUrlText").value = url;
+  document.getElementById("interviewUrlBox").style.display = "block";
+}
+
+function copyInterviewUrl() {
+  const input = document.getElementById("interviewUrlText");
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.getElementById("copyInterviewUrlBtn");
+    btn.textContent = "✓ コピーしました";
+    setTimeout(() => { btn.textContent = "コピー"; }, 2000);
+  });
+}
+
+// 面談用URL画面：本人・上長・面談メモをまとめてトークンで取得して表示する
+function loadInterviewView() {
+  showStep(3);
+  document.getElementById("progressFill").style.width = "100%";
+  document.getElementById("stepLabel").textContent = "面談記録";
+  document.getElementById("appTitle").textContent = "浄美社 面談記録";
+  document.getElementById("resultName").textContent = "データを読み込んでいます…";
+  document.getElementById("resultMeta").textContent = "";
+  document.getElementById("printBtn").style.display = "";
+
+  const statusEl = document.getElementById("sendStatus");
+  const cbName = "gasCallback_" + Date.now();
+
+  const timer = setTimeout(() => {
+    window[cbName] = null;
+    document.getElementById("resultName").textContent = "データが見つかりません";
+    statusEl.className = "send-status err";
+    statusEl.textContent = "このURLに対応する自己評価が見つかりませんでした。URLが正しいかご確認ください。";
+  }, 8000);
+
+  window[cbName] = function(result) {
+    clearTimeout(timer);
+    window[cbName] = null;
+    document.getElementById("jsonpInterviewScript")?.remove();
+
+    if (result.status !== "ok") {
+      document.getElementById("resultName").textContent = "データが見つかりません";
+      statusEl.className = "send-status err";
+      statusEl.textContent = "このURLに対応する自己評価が見つかりませんでした。URLが正しいかご確認ください。";
+      return;
+    }
+
+    targetName = result.name || targetName;
+    interviewSelfScores = result.scores;
+
+    document.getElementById("resultName").textContent = `${targetName} さんの面談記録`;
+    document.getElementById("resultMeta").textContent = `面談日：${new Date().toLocaleDateString("ja-JP")}`;
+
+    // レーダーチャートはまだ存在しない（クイズを経由していないため）ので、まず空の状態で作る
+    if (radarChart) radarChart.destroy();
+    const ctx = document.getElementById("radarChart").getContext("2d");
+    radarChart = new Chart(ctx, {
+      type: "radar",
+      data: { labels: CAPABILITIES.map(c => c.short), datasets: [] },
+      options: {
+        responsive: true,
+        scales: {
+          r: { min: 0, max: 4, ticks: { stepSize: 1, font: { size: 11 } }, pointLabels: { font: { size: 11, weight: "bold" } } },
+        },
+        plugins: { legend: { position: "bottom", labels: { font: { size: 11 } } } },
+      },
+    });
+
+    if (result.manager) {
+      userName = result.manager.name || userName;
+      document.getElementById("resultSummary").innerHTML = "";
+      overlayManagerChart(result.manager.scores, result.scores);
+    } else {
+      document.getElementById("resultSummary").innerHTML = `
+        <div class="rs-item"><div class="rs-lbl">自己評価平均</div><div class="rs-val j-ok">${(Math.round(result.scores.reduce((a,b)=>a+b,0)/result.scores.length*10)/10).toFixed(1)}</div></div>
+      `;
+      radarChart.data.datasets = [{
+        label: `自己評価（${targetName}）`,
+        data: result.scores,
+        backgroundColor: "rgba(26, 60, 94, 0.12)",
+        borderColor: "#1a3c5e", borderWidth: 2.5,
+        pointBackgroundColor: "#1a3c5e", pointRadius: 4,
+      }];
+      radarChart.update();
+      document.querySelector(".chart-legend").textContent = "青：本人の自己評価（上長評価はまだありません）";
+    }
+
+    renderSelfInputDisplay(result);
+
+    const memoBox = document.getElementById("interviewMemoBox");
+    const goalBox = document.getElementById("nextTermGoalBox");
+    const notesBox = document.getElementById("interviewNotesBox");
+    if (memoBox) { memoBox.value = result.interview_memo || ""; lastSentInterviewMemo = memoBox.value; }
+    if (goalBox) { goalBox.value = result.next_term_goal || ""; lastSentNextTermGoal = goalBox.value; }
+    if (notesBox) { notesBox.value = result.interview_notes || ""; lastSentInterviewNotes = notesBox.value; }
+    document.getElementById("interviewFieldsArea").style.display = "block";
+
+    interviewContextLoaded = true;
+    statusEl.className = "send-status";
+    statusEl.textContent = "";
+  };
+
+  const url = `${GAS_URL}?action=getInterviewData&token=${encodeURIComponent(urlToken)}&callback=${cbName}`;
+  const script = document.createElement("script");
+  script.id = "jsonpInterviewScript"; script.src = url;
+  document.body.appendChild(script);
 }
 
 // 初期化
