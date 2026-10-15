@@ -1388,13 +1388,14 @@ function renderSelfInputDisplay(result) {
       <div style="font-size:12px;color:#333;line-height:1.6;">${(selfReflection || "（未記入）").replace(/\n/g, "<br>")}</div>
     </div>`;
 
-  // 面談画面でのみ：上長が自分の評価画面で書いた一言メモも一緒に表示する
+  // 面談画面・印刷時の最終資料でも：上長が自分の評価画面で書いた一言メモを必ず一緒に表示する
+  // （本人のメモと同じく、未記入でもその旨を表示し「出ていない」と誤解されないようにする）
   const managerComment = (result.manager && result.manager.comment || "").trim();
-  if (isInterviewMode && managerComment) {
+  if (isInterviewMode) {
     html += `
     <div style="margin-top:14px;padding-top:10px;border-top:1px dashed #c0cfe8;">
       <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:2px;">上長の面談前メモ</div>
-      <div style="font-size:12px;color:#333;line-height:1.6;">${managerComment.replace(/\n/g, "<br>")}</div>
+      <div style="font-size:12px;color:#333;line-height:1.6;">${managerComment ? managerComment.replace(/\n/g, "<br>") : "（上長のメモはまだ書かれていません）"}</div>
     </div>`;
   }
 
@@ -1541,10 +1542,11 @@ function loadInterviewView() {
   document.body.appendChild(script);
 }
 
-// 印刷時：CSSで枠が小さくなるタイミングでチャートを再レイアウトしないと、
-// 画面用に描いた文字がそのまま縮小され、ラベルが重なって「つぶれる」。
-// resize()で印刷用の枠サイズに合わせて描き直す。
-window.addEventListener("beforeprint", () => { if (radarChart) radarChart.resize(); });
+// 印刷時：ブラウザの印刷エンジンによってはCSSのコンテナサイズ変化を
+// resize()が正しく追従しない（Safari等で崩れが再発する）ため、
+// 印刷直前に明示的な正方形サイズ（260×260px）を指定して強制的に描き直す。
+// 画面に戻すafterprintでは引数なしresize()で自動サイズに戻す。
+window.addEventListener("beforeprint", () => { if (radarChart) radarChart.resize(260, 260); });
 window.addEventListener("afterprint",  () => { if (radarChart) radarChart.resize(); });
 
 // 初期化
