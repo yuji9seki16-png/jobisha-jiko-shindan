@@ -154,7 +154,7 @@ input[type="text"]:focus, select:focus {
 
 .chart-wrap { background: var(--white); border: 1px solid var(--border); padding: 20px; margin-bottom: 16px; }
 .chart-wrap h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
-canvas#radarChart { max-height: 380px; }
+.radar-box { position: relative; width: 100%; height: 380px; max-width: 420px; margin: 0 auto; }
 
 /* コメント欄 */
 .comment-area {
@@ -232,7 +232,7 @@ canvas#radarChart { max-height: 380px; }
 
   /* 余白・チャートを詰めて、裏表1枚（2ページ）に収まりやすくする */
   .chart-wrap { margin-bottom: 8px; padding: 10px; }
-  canvas#radarChart { max-height: 260px !important; }
+  .radar-box { height: 260px !important; max-width: 260px !important; margin: 0 auto !important; }
   .result-table { margin-bottom: 8px; }
   .result-table th, .result-table td { padding: 4px 8px; }
   .analysis-box { margin-bottom: 8px; }
@@ -311,7 +311,9 @@ canvas#radarChart { max-height: 380px; }
     <!-- レーダーチャート -->
     <div class="chart-wrap">
       <h3>強み・伸びしろ レーダーチャート</h3>
-      <canvas id="radarChart"></canvas>
+      <div class="radar-box">
+        <canvas id="radarChart"></canvas>
+      </div>
       <p class="chart-legend" style="font-size:10px;color:var(--muted);margin-top:8px;">青：あなたのスコア</p>
     </div>
 
@@ -342,7 +344,7 @@ canvas#radarChart { max-height: 380px; }
       <label for="nextTermGoalBox" style="margin-top:14px;">次の半期に合意した目標</label>
       <textarea class="comment-box" id="nextTermGoalBox" placeholder="次の半期に向けて合意した目標を書いてください…"></textarea>
 
-      <label for="interviewNotesBox" style="margin-top:14px;">その他（家庭の事情など）</label>
+      <label for="interviewNotesBox" style="margin-top:14px;">その他</label>
       <textarea class="comment-box" id="interviewNotesBox" placeholder="その他、共有しておきたいことがあれば書いてください…"></textarea>
     </div>
 
@@ -697,6 +699,7 @@ function showResult() {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
         r: {
           min: 0, max: 4,
@@ -1490,6 +1493,7 @@ function loadInterviewView() {
       data: { labels: CAPABILITIES.map(c => c.short), datasets: [] },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         scales: {
           r: { min: 0, max: 4, ticks: { stepSize: 1, font: { size: 11 } }, pointLabels: { font: { size: 11, weight: "bold" } } },
         },
