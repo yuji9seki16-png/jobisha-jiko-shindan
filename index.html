@@ -367,7 +367,7 @@ input[type="text"]:focus, select:focus {
 
     <!-- 面談前メモ（上長が自分の評価画面で書く一言。上長評価モードのみ表示） -->
     <div class="comment-area" id="managerCommentArea" style="display:none;">
-      <label for="commentBox">面談前の一言メモ　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
+      <label for="commentBox"><span id="commentBoxTitle">面談前の一言メモ</span>　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
     </div>
 
@@ -651,6 +651,7 @@ function showResult() {
   if (isManagerMode) {
     document.getElementById("printBtn").style.display = "";
     document.getElementById("interviewUrlBtn").style.display = "";
+    document.getElementById("commentBoxTitle").textContent = "上長の面談前メモ";
   }
   document.getElementById("managerCommentArea").style.display = "block";
   document.getElementById("progressFill").style.width = "100%";
@@ -1368,9 +1369,11 @@ function renderSelfInputDisplay(result) {
     + `<span>本人の面談前メモ・個人目標</span>`
     + `<button type="button" onclick="refetchSelfInput()" style="font-size:11px;padding:4px 10px;border:1px solid #c0cfe8;border-radius:4px;background:#fff;cursor:pointer;" class="no-print">↻ 本人データを再取得</button>`
     + `</label>`;
-  html += `<div style="font-size:12px;color:#333;line-height:1.7;margin-bottom:${goals.length ? "14px" : "0"};">`
+  html += `<div style="margin-bottom:8px;">`
+    + `<div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">面談前の一言メモ</div>`
+    + `<div style="font-size:12px;color:#333;line-height:1.6;">`
     + (comment ? comment.replace(/\n/g, "<br>") : "（本人のメモはまだ書かれていません）")
-    + `</div>`;
+    + `</div></div>`;
   if (goals.length) {
     html += goals.map(g => `
       <div style="margin-bottom:8px;">
