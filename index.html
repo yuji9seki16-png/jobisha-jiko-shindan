@@ -363,8 +363,8 @@ canvas#radarChart { max-height: 380px; }
       <textarea class="comment-box" id="selfReflectionBox" placeholder="これまでの期間を振り返って、できたこと・できなかったことを書いてください…"></textarea>
     </div>
 
-    <!-- 面談前メモ -->
-    <div class="comment-area">
+    <!-- 面談前メモ（上長が自分の評価画面で書く一言。上長評価モードのみ表示） -->
+    <div class="comment-area" id="managerCommentArea" style="display:none;">
       <label for="commentBox">面談前の一言メモ　<span class="autosave-hint" style="font-weight:normal;color:#888;">書くと自動で保存されます</span></label>
       <textarea class="comment-box" id="commentBox" placeholder="今回の診断を通じて気づいたこと、面談で話したいことをメモしてください…"></textarea>
     </div>
@@ -649,6 +649,7 @@ function showResult() {
   if (isManagerMode) {
     document.getElementById("printBtn").style.display = "";
     document.getElementById("interviewUrlBtn").style.display = "";
+    document.getElementById("managerCommentArea").style.display = "block";
   }
   document.getElementById("progressFill").style.width = "100%";
   document.getElementById("stepLabel").textContent = "STEP 3 / 3 ─ 結果";
@@ -662,6 +663,9 @@ function showResult() {
   document.getElementById("resultMeta").textContent = isManagerMode
     ? `評価者所属：${userDept}　診断日：${new Date().toLocaleDateString("ja-JP")}`
     : `所属：${userDept}　診断日：${new Date().toLocaleDateString("ja-JP")}`;
+  document.title = isManagerMode
+    ? `${targetName || userName}_上長評価`
+    : `${userName}_自己診断結果`;
 
   // スコアサマリー（自己評価平均・差分平均は overlayManagerChart 側で追加する）
   const avgScore = Math.round(scores.reduce((a, b) => a + b) / 8 * 10) / 10;
@@ -1128,6 +1132,7 @@ function resetAll() {
   document.getElementById("selfInputDisplay").style.display = "none";
   document.getElementById("selfInputDisplay").innerHTML = "";
   document.getElementById("commentBox").value = "";
+  document.getElementById("managerCommentArea").style.display = "none";
   document.getElementById("managerUrlBox").style.display = "none";
   document.getElementById("printBtn").style.display = "none";
   document.getElementById("inputName").value = "";
@@ -1379,6 +1384,17 @@ function renderSelfInputDisplay(result) {
       <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:2px;">本人の振り返り</div>
       <div style="font-size:12px;color:#333;line-height:1.6;">${(selfReflection || "（未記入）").replace(/\n/g, "<br>")}</div>
     </div>`;
+
+  // 面談画面でのみ：上長が自分の評価画面で書いた一言メモも一緒に表示する
+  const managerComment = (result.manager && result.manager.comment || "").trim();
+  if (isInterviewMode && managerComment) {
+    html += `
+    <div style="margin-top:14px;padding-top:10px;border-top:1px dashed #c0cfe8;">
+      <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:2px;">上長の面談前メモ</div>
+      <div style="font-size:12px;color:#333;line-height:1.6;">${managerComment.replace(/\n/g, "<br>")}</div>
+    </div>`;
+  }
+
   box.innerHTML = html;
   box.style.display = "block";
 }
@@ -1464,6 +1480,7 @@ function loadInterviewView() {
 
     document.getElementById("resultName").textContent = `${targetName} さんの面談記録`;
     document.getElementById("resultMeta").textContent = `面談日：${new Date().toLocaleDateString("ja-JP")}`;
+    document.title = `${targetName}_面談記録`;
 
     // レーダーチャートはまだ存在しない（クイズを経由していないため）ので、まず空の状態で作る
     if (radarChart) radarChart.destroy();
@@ -1519,6 +1536,12 @@ function loadInterviewView() {
   script.id = "jsonpInterviewScript"; script.src = url;
   document.body.appendChild(script);
 }
+
+// 印刷時：CSSで枠が小さくなるタイミングでチャートを再レイアウトしないと、
+// 画面用に描いた文字がそのまま縮小され、ラベルが重なって「つぶれる」。
+// resize()で印刷用の枠サイズに合わせて描き直す。
+window.addEventListener("beforeprint", () => { if (radarChart) radarChart.resize(); });
+window.addEventListener("afterprint",  () => { if (radarChart) radarChart.resize(); });
 
 // 初期化
 initFromURL();
