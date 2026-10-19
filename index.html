@@ -155,6 +155,15 @@ input[type="text"]:focus, select:focus {
 .chart-wrap { background: var(--white); border: 1px solid var(--border); padding: 20px; margin-bottom: 16px; }
 .chart-wrap h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
 .radar-box { position: relative; width: 100%; height: 400px; margin: 0 auto; }
+/* 凡例（グラフの上・線の見本つき） */
+.radar-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 22px; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.radar-legend .lg-self { color: #1a3c5e; }
+.radar-legend .lg-manager { color: #c0392b; }
+.radar-legend .lg-gap { color: #8a6d00; font-size: 12px; font-weight: normal; }
+.radar-legend .lg-line { display: inline-block; width: 28px; height: 0; vertical-align: middle; margin-right: 6px; }
+.radar-legend .lg-self .lg-line { border-top: 3px solid #1a3c5e; }
+.radar-legend .lg-manager .lg-line { border-top: 3px dashed #c0392b; }
+.radar-legend .lg-box { display: inline-block; width: 14px; height: 14px; background: #fde68a; vertical-align: middle; margin-right: 6px; }
 
 /* コメント欄 */
 .comment-area {
@@ -316,10 +325,11 @@ input[type="text"]:focus, select:focus {
     <!-- レーダーチャート -->
     <div class="chart-wrap">
       <h3>強み・伸びしろ レーダーチャート</h3>
+      <div class="radar-legend" id="radarLegend"></div>
       <div class="radar-box">
         <canvas id="radarChart"></canvas>
       </div>
-      <p class="chart-legend" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center;">青：あなたのスコア</p>
+      
     </div>
 
     <!-- 能力別テーブル -->
@@ -568,6 +578,15 @@ const radarGapPlugin = {
     });
   },
 };
+// グラフの上の凡例。parts に "self"（本人）／"manager"（上長）／"gap"（差の黄色）を並べる
+function setRadarLegend(parts) {
+  const html = {
+    self:    '<span class="lg-self"><span class="lg-line"></span>本人（自己評価）</span>',
+    manager: '<span class="lg-manager"><span class="lg-line"></span>上長（上長評価）</span>',
+    gap:     '<span class="lg-gap"><span class="lg-box"></span>差が1.0以上</span>',
+  };
+  document.getElementById("radarLegend").innerHTML = parts.map(p => html[p]).join("");
+}
 if (window.Chart) {
   Chart.register(radarScorePlugin, radarGapPlugin);
   // アニメーションの途中が印刷に写ると線が中心につぶれるため、アニメーションは使わない
@@ -789,9 +808,7 @@ function showResult() {
     },
     options: radarOptions(),
   });
-  document.querySelector(".chart-legend").textContent = isManagerMode
-    ? "赤い点線：上長評価のスコア"
-    : "青：あなたのスコア";
+  setRadarLegend(isManagerMode ? ["manager"] : ["self"]);
 
   // テーブル（上長評価との重ね表示は overlayManagerChart 側で比較表に差し替える）
   document.getElementById("resultTableHead").innerHTML = `
@@ -1365,7 +1382,7 @@ function overlayManagerChart(managerScores, selfScores) {
     },
   ];
   radarChart.update();
-  document.querySelector(".chart-legend").textContent = "青の塗り：本人の自己評価　赤の点線：上長評価　黄色：差が1.0以上";
+  setRadarLegend(["self", "manager", "gap"]);
 
   const diffs = CAPABILITIES.map((cap, i) => ({
     name: cap.name,
@@ -1615,7 +1632,7 @@ function loadInterviewView() {
         ...RADAR_SELF_STYLE,
       }];
       radarChart.update();
-      document.querySelector(".chart-legend").textContent = "青：本人の自己評価（上長評価はまだありません）";
+      setRadarLegend(["self"]);
     }
 
     renderSelfInputDisplay(result);
