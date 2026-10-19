@@ -189,6 +189,8 @@ input[type="text"]:focus, select:focus {
 .analysis-item { border: 1px solid var(--border); padding: 14px; background: var(--white); }
 .analysis-item h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
 .analysis-item p { font-size: 12px; color: #333; line-height: 1.7; }
+.analysis-box.compare { grid-template-columns: 1fr; }
+.analysis-item p.one-line { white-space: nowrap; }
 .compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .compare-col { border-left: 3px solid; padding: 4px 0 4px 10px; }
 .compare-col-manager { border-color: #c0392b; }
@@ -214,6 +216,7 @@ input[type="text"]:focus, select:focus {
 @media (max-width: 480px) {
   .analysis-box { grid-template-columns: 1fr; }
   .chart-wrap { padding: 12px 6px; }
+  .analysis-item p.one-line { white-space: normal; }
 }
 
 /* ─── 印刷 ─── */
@@ -817,17 +820,18 @@ function showResult() {
   const strengthItems = ranked.slice(0, 1);
   const growthItems = ranked.slice(-1);
 
-  const strengthText = strengthItems.map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
-  const growthText = growthItems.map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+  const strengthText = strengthItems.map(c => `・${c.name.replace(/（.*?）/g, "")}（${c.score.toFixed(1)}）`).join("<br>");
+  const growthText = growthItems.map(c => `・${c.name.replace(/（.*?）/g, "")}（${c.score.toFixed(1)}）`).join("<br>");
 
+  document.getElementById("analysisBox").classList.remove("compare");
   document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
       <h4 id="strengthHeading">強み仮説（スコア上位1つ）</h4>
-      <p>${strengthText}</p>
+      <p class="one-line">${strengthText}</p>
     </div>
     <div class="analysis-item">
       <h4 id="growthHeading">成長の余白（スコア下位1つ）</h4>
-      <p>${growthText}</p>
+      <p class="one-line">${growthText}</p>
     </div>
   `;
 
@@ -1410,28 +1414,29 @@ function overlayManagerChart(managerScores, selfScores) {
   const managerRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: managerScores[i] }))
     .sort((a, b) => b.score - a.score);
   const managerStrengthText = managerRanked.slice(0, 1)
-    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+    .map(c => `・${c.name.replace(/（.*?）/g, "")}（${c.score.toFixed(1)}）`).join("<br>");
   const managerGrowthText = managerRanked.slice(-1)
-    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+    .map(c => `・${c.name.replace(/（.*?）/g, "")}（${c.score.toFixed(1)}）`).join("<br>");
 
   const selfRanked = CAPABILITIES.map((cap, i) => ({ name: cap.name, score: selfScores[i] }))
     .sort((a, b) => b.score - a.score);
   const selfStrengthText = selfRanked.slice(0, 1)
-    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+    .map(c => `・${c.name.replace(/（.*?）/g, "")}（${c.score.toFixed(1)}）`).join("<br>");
   const selfGrowthText = selfRanked.slice(-1)
-    .map(c => `・${c.name}（${c.score.toFixed(1)}）`).join("<br>");
+    .map(c => `・${c.name.replace(/（.*?）/g, "")}（${c.score.toFixed(1)}）`).join("<br>");
 
+  document.getElementById("analysisBox").classList.add("compare");  // 上長と本人を並べるため、2枚を縦に積んで横幅を取る
   document.getElementById("analysisBox").innerHTML = `
     <div class="analysis-item">
       <h4>強み仮説（上位1つ）</h4>
       <div class="compare-cols">
         <div class="compare-col compare-col-manager">
           <div class="compare-col-label">上長評価</div>
-          <p>${managerStrengthText}</p>
+          <p class="one-line">${managerStrengthText}</p>
         </div>
         <div class="compare-col compare-col-self">
           <div class="compare-col-label">自己評価</div>
-          <p>${selfStrengthText}</p>
+          <p class="one-line">${selfStrengthText}</p>
         </div>
       </div>
     </div>
@@ -1440,11 +1445,11 @@ function overlayManagerChart(managerScores, selfScores) {
       <div class="compare-cols">
         <div class="compare-col compare-col-manager">
           <div class="compare-col-label">上長評価</div>
-          <p>${managerGrowthText}</p>
+          <p class="one-line">${managerGrowthText}</p>
         </div>
         <div class="compare-col compare-col-self">
           <div class="compare-col-label">自己評価</div>
-          <p>${selfGrowthText}</p>
+          <p class="one-line">${selfGrowthText}</p>
         </div>
       </div>
     </div>
