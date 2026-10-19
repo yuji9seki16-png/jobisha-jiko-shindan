@@ -825,7 +825,7 @@ function showResult() {
     tableHTML += `
       <tr>
         <td style="text-align:center;">${typeTag}</td>
-        <td class="cap-name" style="font-size:12px;">${cap.name}</td>
+        <td class="cap-name" style="font-size:12px;">${cap.type === "スタンス" ? cap.name.replace(/（.*?）/g, "") : cap.name}</td>
         <td class="score-cell">${scores[i].toFixed(1)}</td>
       </tr>`;
   });
@@ -1419,7 +1419,7 @@ function overlayManagerChart(managerScores, selfScores) {
     compareHTML += `
       <tr${rowClass}>
         <td style="text-align:center;">${typeTag}</td>
-        <td class="cap-name" style="font-size:12px;">${cap.name}</td>
+        <td class="cap-name" style="font-size:12px;">${cap.type === "スタンス" ? cap.name.replace(/（.*?）/g, "") : cap.name}</td>
         <td class="score-cell">${d.self.toFixed(1)}</td>
         <td class="score-cell">${d.manager.toFixed(1)}</td>
         <td class="diff-cell"><span class="diff-num">${d.diff.toFixed(1)}</span><span class="diff-label">${dirLabel}</span></td>
