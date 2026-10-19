@@ -154,7 +154,7 @@ input[type="text"]:focus, select:focus {
 
 .chart-wrap { background: var(--white); border: 1px solid var(--border); padding: 20px; margin-bottom: 16px; }
 .chart-wrap h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
-.radar-box { position: relative; width: 100%; height: 380px; max-width: 420px; margin: 0 auto; }
+.radar-box { position: relative; width: 100%; height: 400px; margin: 0 auto; }
 
 /* コメント欄 */
 .comment-area {
@@ -213,6 +213,7 @@ input[type="text"]:focus, select:focus {
 /* ─── モバイル調整 ─── */
 @media (max-width: 480px) {
   .analysis-box { grid-template-columns: 1fr; }
+  .chart-wrap { padding: 12px 6px; }
 }
 
 /* ─── 印刷 ─── */
@@ -233,7 +234,7 @@ input[type="text"]:focus, select:focus {
 
   /* 余白・チャートを詰めて、裏表1枚（2ページ）に収まりやすくする */
   .chart-wrap { margin-bottom: 8px; padding: 10px; }
-  .radar-box { height: 260px !important; max-width: 260px !important; margin: 0 auto !important; }
+  .radar-box { height: 300px !important; max-width: 560px !important; margin: 0 auto !important; }
   .result-table { margin-bottom: 8px; }
   .result-table th, .result-table td { padding: 4px 8px; }
   .analysis-box { margin-bottom: 8px; }
@@ -315,7 +316,7 @@ input[type="text"]:focus, select:focus {
       <div class="radar-box">
         <canvas id="radarChart"></canvas>
       </div>
-      <p class="chart-legend" style="font-size:10px;color:var(--muted);margin-top:8px;">青：あなたのスコア</p>
+      <p class="chart-legend" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center;">青：あなたのスコア</p>
     </div>
 
     <!-- 能力別テーブル -->
@@ -358,7 +359,7 @@ input[type="text"]:focus, select:focus {
 
     <!-- 半期の個人目標／本人の振り返り（自己診断モードのみ） -->
     <div class="comment-area" id="termGoalArea" style="display:none;">
-      <label for="termGoalBox">半期の個人目標<span class="q-hint">取り組みたい目標・チャレンジを書いてください</span></label>
+      <label for="termGoalBox">半期の個人目標<span class="q-hint">取り組み目標・設定したチャレンジなどを書いてください</span></label>
       <textarea class="comment-box" id="termGoalBox" placeholder="ここに書いてください…"></textarea>
     </div>
     <div class="comment-area" id="selfReflectionArea" style="display:none;">
@@ -481,6 +482,94 @@ let currentQ = 0;
 let answers = new Array(24).fill(null);
 let userName = "", userDept = "";
 let radarChart = null;
+
+// ── レーダーチャートの見た目（本人＝青の塗り／上長＝赤の点線／差が1.0以上の方角を黄色の扇形）──
+const RADAR_SELF_STYLE = {
+  backgroundColor: "rgba(26, 60, 94, 0.20)", borderColor: "#1a3c5e", borderWidth: 2,
+  pointBackgroundColor: "#1a3c5e", pointRadius: 4,
+};
+const RADAR_MANAGER_STYLE = {
+  backgroundColor: "rgba(192, 57, 43, 0.06)", borderColor: "#c0392b", borderWidth: 2.5, borderDash: [6, 4],
+  pointBackgroundColor: "#fff", pointBorderColor: "#c0392b", pointBorderWidth: 2, pointRadius: 5,
+};
+// 項目名はステージ表の言葉を端折らずに出す（カッコ書きは外す）。狭い画面では2行に折る
+const RADAR_WRAP = ["全体を構造的に|捉える力", "決めて動く力", "仕事の|プロセス設計力", "人を動かす力",
+                    "改善を|し続ける姿勢", "思いを|巡らせる姿勢", "はじめてに|向き合う姿勢", "圧倒的|当事者意識"];
+function radarLabels() {
+  const narrow = window.innerWidth < 560;
+  return CAPABILITIES.map((c, i) => {
+    const num = c.name.split(" ")[0];
+    const lines = narrow ? RADAR_WRAP[i].split("|") : [RADAR_WRAP[i].replace("|", "")];
+    lines[0] = num + " " + lines[0];
+    return [...lines, "　　　　"];  // 最後の空き行に点数を描く（点数の幅ぶん場所を取っておく）
+  });
+}
+function radarOptions() {
+  const narrow = window.innerWidth < 560;
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      r: {
+        min: 0, max: 4,
+        ticks: { stepSize: 1, display: false },
+        grid: { color: "#e6e6e6" }, angleLines: { color: "#e6e6e6" },
+        pointLabels: {
+          font: { size: narrow ? 10 : 12, weight: "bold", lineHeight: 1.3 },
+          color: ctx => CAPABILITIES[ctx.index].type === "スキル" ? "#1a3c5e" : "#2e6b4f",
+          padding: narrow ? 4 : 8,
+        },
+      },
+    },
+    plugins: { legend: { display: false } },
+  };
+}
+// 項目名の下に点数（2人分あるときは「本人 / 上長」を色分け）
+const radarScorePlugin = {
+  id: "radarScores",
+  afterDraw(chart) {
+    const r = chart.scales.r, ds = chart.data.datasets;
+    if (!r || !ds.length) return;
+    const g = chart.ctx;
+    CAPABILITIES.forEach((_, i) => {
+      const b = r.getPointLabelPosition(i);
+      const y = b.bottom - (window.innerWidth < 560 ? 6 : 8);
+      const parts = [];
+      ds.forEach((d, k) => {
+        if (k > 0) parts.push([" / ", "#999"]);
+        parts.push([Number(d.data[i]).toFixed(1), d.borderColor]);
+      });
+      g.save();
+      g.font = `bold ${window.innerWidth < 560 ? 11 : 13}px sans-serif`; g.textBaseline = "middle"; g.textAlign = "left";
+      let x = (b.left + b.right) / 2 - parts.reduce((w, p) => w + g.measureText(p[0]).width, 0) / 2;
+      parts.forEach(([t, col]) => { g.fillStyle = col; g.fillText(t, x, y); x += g.measureText(t).width; });
+      g.restore();
+    });
+  },
+};
+// 本人と上長の差が1.0以上の方角を、うすい黄色の扇形で塗る
+const radarGapPlugin = {
+  id: "radarGap",
+  beforeDatasetsDraw(chart) {
+    const r = chart.scales.r, ds = chart.data.datasets;
+    if (!r || ds.length < 2) return;
+    const g = chart.ctx, step = Math.PI * 2 / CAPABILITIES.length;
+    CAPABILITIES.forEach((_, i) => {
+      if (Math.abs(ds[0].data[i] - ds[1].data[i]) < 1.0) return;
+      const ang = r.getIndexAngle(i) - Math.PI / 2;
+      g.save();
+      g.fillStyle = "rgba(253, 224, 120, 0.45)";
+      g.beginPath(); g.moveTo(r.xCenter, r.yCenter);
+      g.arc(r.xCenter, r.yCenter, r.drawingArea, ang - step / 2, ang + step / 2);
+      g.closePath(); g.fill(); g.restore();
+    });
+  },
+};
+if (window.Chart) {
+  Chart.register(radarScorePlugin, radarGapPlugin);
+  // アニメーションの途中が印刷に写ると線が中心につぶれるため、アニメーションは使わない
+  Chart.defaults.animation = false;
+}
 let submitted = false;
 let lastSentAnswers = "";   // 自動送信ずみの回答内容
 let lastSentComment = "";   // 自動送信ずみのメモ
@@ -682,41 +771,23 @@ function showResult() {
 
   // レーダーチャート
   if (radarChart) { radarChart.destroy(); }
-  const labels = CAPABILITIES.map(c => c.short);
   const ctx = document.getElementById("radarChart").getContext("2d");
   radarChart = new Chart(ctx, {
     type: "radar",
     data: {
-      labels: labels,
+      labels: radarLabels(),
       datasets: [
         {
           label: isManagerMode ? `上長評価（${userName}）` : "あなたのスコア",
           data: scores,
-          backgroundColor: isManagerMode ? "rgba(192, 57, 43, 0.15)" : "rgba(26, 60, 94, 0.15)",
-          borderColor: isManagerMode ? "#c0392b" : "#1a3c5e",
-          borderWidth: 2,
-          pointBackgroundColor: isManagerMode ? "#c0392b" : "#1a3c5e",
-          pointRadius: 4,
+          ...(isManagerMode ? RADAR_MANAGER_STYLE : RADAR_SELF_STYLE),
         },
       ],
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        r: {
-          min: 0, max: 4,
-          ticks: { stepSize: 1, font: { size: 11 } },
-          pointLabels: { font: { size: 11, weight: "bold" } },
-        },
-      },
-      plugins: {
-        legend: { position: "bottom", labels: { font: { size: 11 } } },
-      },
-    },
+    options: radarOptions(),
   });
   document.querySelector(".chart-legend").textContent = isManagerMode
-    ? "赤：上長評価のスコア"
+    ? "赤い点線：上長評価のスコア"
     : "青：あなたのスコア";
 
   // テーブル（上長評価との重ね表示は overlayManagerChart 側で比較表に差し替える）
@@ -1281,20 +1352,16 @@ function overlayManagerChart(managerScores, selfScores) {
     {
       label: `自己評価（${targetName}）`,
       data: selfScores,
-      backgroundColor: "rgba(26, 60, 94, 0.12)",
-      borderColor: "#1a3c5e", borderWidth: 2.5,
-      pointBackgroundColor: "#1a3c5e", pointRadius: 4,
+      ...RADAR_SELF_STYLE,
     },
     {
       label: `上長評価（${userName}）`,
       data: managerScores,
-      backgroundColor: "rgba(192, 57, 43, 0.12)",
-      borderColor: "#c0392b", borderWidth: 2.5,
-      pointBackgroundColor: "#c0392b", pointRadius: 4,
+      ...RADAR_MANAGER_STYLE,
     },
   ];
   radarChart.update();
-  document.querySelector(".chart-legend").textContent = "青：本人の自己評価　赤：上長評価";
+  document.querySelector(".chart-legend").textContent = "青の塗り：本人の自己評価　赤の点線：上長評価　黄色：差が1.0以上";
 
   const diffs = CAPABILITIES.map((cap, i) => ({
     name: cap.name,
@@ -1525,15 +1592,8 @@ function loadInterviewView() {
     const ctx = document.getElementById("radarChart").getContext("2d");
     radarChart = new Chart(ctx, {
       type: "radar",
-      data: { labels: CAPABILITIES.map(c => c.short), datasets: [] },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          r: { min: 0, max: 4, ticks: { stepSize: 1, font: { size: 11 } }, pointLabels: { font: { size: 11, weight: "bold" } } },
-        },
-        plugins: { legend: { position: "bottom", labels: { font: { size: 11 } } } },
-      },
+      data: { labels: radarLabels(), datasets: [] },
+      options: radarOptions(),
     });
 
     if (result.manager) {
@@ -1547,9 +1607,7 @@ function loadInterviewView() {
       radarChart.data.datasets = [{
         label: `自己評価（${targetName}）`,
         data: result.scores,
-        backgroundColor: "rgba(26, 60, 94, 0.12)",
-        borderColor: "#1a3c5e", borderWidth: 2.5,
-        pointBackgroundColor: "#1a3c5e", pointRadius: 4,
+        ...RADAR_SELF_STYLE,
       }];
       radarChart.update();
       document.querySelector(".chart-legend").textContent = "青：本人の自己評価（上長評価はまだありません）";
@@ -1578,9 +1636,9 @@ function loadInterviewView() {
 
 // 印刷時：ブラウザの印刷エンジンによってはCSSのコンテナサイズ変化を
 // resize()が正しく追従しない（Safari等で崩れが再発する）ため、
-// 印刷直前に明示的な正方形サイズ（260×260px）を指定して強制的に描き直す。
+// 印刷直前に明示的なサイズ（横長 560×300px＝項目名を全文で出すため）を指定して強制的に描き直す。
 // 画面に戻すafterprintでは引数なしresize()で自動サイズに戻す。
-window.addEventListener("beforeprint", () => { if (radarChart) radarChart.resize(260, 260); });
+window.addEventListener("beforeprint", () => { if (radarChart) radarChart.resize(560, 300); });
 window.addEventListener("afterprint",  () => { if (radarChart) radarChart.resize(); });
 
 // 初期化
