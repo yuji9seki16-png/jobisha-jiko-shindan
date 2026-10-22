@@ -233,6 +233,8 @@ input[type="text"]:focus, select:focus {
   body { background: #fff; }
   .app-header, .progress-bar, .btn, .q-nav, #step1, #step2, #step3-nav, .send-area { display: none !important; }
   .autosave-hint, #sendStatus, .no-print { display: none !important; }
+  /* 「本人に渡す用」で印刷するときは、上長のメモだけを外す */
+  body.print-for-self .manager-only { display: none !important; }
   .comment-box, .goal-box { border: none !important; padding: 0 !important; resize: none !important; min-height: 0 !important; overflow: visible !important; }
   .step { display: block !important; }
   #step1, #step2 { display: none !important; }
@@ -381,7 +383,7 @@ input[type="text"]:focus, select:focus {
     </div>
 
     <!-- 面談前メモ（上長が自分の評価画面で書く一言。上長評価モードのみ表示） -->
-    <div class="comment-area" id="managerCommentArea" style="display:none;">
+    <div class="comment-area manager-only" id="managerCommentArea" style="display:none;">
       <label for="commentBox"><span id="commentBoxTitle">面談前の一言メモ</span><span class="q-hint">今回の診断を通じて気づいたこと、面談で話したいことをメモしてください</span></label>
       <textarea class="comment-box" id="commentBox" placeholder="ここに書いてください…"></textarea>
     </div>
@@ -389,7 +391,10 @@ input[type="text"]:focus, select:focus {
     <button class="btn btn-primary" id="finalizeBtn" style="display:none;width:100%;margin-bottom:16px;" onclick="finalizeSelfInput()">✓ 入力を完了して上長用URLを発行する</button>
 
     <div id="step3-nav" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-      <button class="btn btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">🖨 印刷 / PDF保存</button>
+      <span id="printBtns" style="display:none;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="printFor('self')">🖨 本人に渡す用（上長メモなし）</button>
+        <button class="btn btn-secondary" onclick="printFor('manager')">🖨 上長控え用（すべて）</button>
+      </span>
       <button class="btn btn-secondary" id="interviewUrlBtn" style="display:none;" onclick="showInterviewUrlBox()">📋 面談用URLを発行</button>
       <button class="btn btn-secondary" id="resetBtn" onclick="resetAll()">← はじめからやり直す</button>
     </div>
@@ -700,6 +705,20 @@ function selectAnswer(val) {
   autoAdvanceTimer = setTimeout(() => { nextQ(); }, 350);
 }
 
+// 印刷ボタン：本人用は上長のメモを外す。PDFの名前も分けて、取り違えないようにする
+function printFor(kind) {
+  const baseTitle = document.title;
+  document.body.classList.toggle("print-for-self", kind === "self");
+  document.title = baseTitle + (kind === "self" ? "_本人用" : "_上長控え");
+  // Safari などは印刷が終わる前に print() から戻るため、元に戻すのは afterprint で行う
+  window.addEventListener("afterprint", function restore() {
+    document.title = baseTitle;
+    document.body.classList.remove("print-for-self");
+    window.removeEventListener("afterprint", restore);
+  });
+  window.print();
+}
+
 // 印刷時、テキストエリアの枠線を消して「書きかけ」感をなくし、
 // 中身が省略されないよう入力欄の高さを内容に合わせて広げる（印刷後に元へ戻す）
 window.addEventListener("beforeprint", function() {
@@ -762,7 +781,7 @@ function calcScores() {
 function showResult() {
   showStep(3);
   if (isManagerMode) {
-    document.getElementById("printBtn").style.display = "";
+    document.getElementById("printBtns").style.display = "flex";
     document.getElementById("interviewUrlBtn").style.display = "";
     document.getElementById("commentBoxTitle").textContent = "上長の面談前メモ";
   }
@@ -1245,7 +1264,7 @@ function resetAll() {
   document.getElementById("interviewUrlBox").style.display = "none";
   document.getElementById("interviewUrlText").value = "";
   document.getElementById("interviewUrlBtn").style.display = "none";
-  document.getElementById("printBtn").style.display = "none";
+  document.getElementById("printBtns").style.display = "none";
   document.getElementById("inputName").value = "";
   document.getElementById("inputDept").value = "";
   document.getElementById("step1Error").style.display = "none";
@@ -1515,7 +1534,7 @@ function renderSelfInputDisplay(result) {
   const managerComment = (result.manager && result.manager.comment || "").trim();
   if (isInterviewMode) {
     html += `
-    <div style="margin-top:14px;padding-top:10px;border-top:1px dashed #c0cfe8;">
+    <div class="manager-only" style="margin-top:14px;padding-top:10px;border-top:1px dashed #c0cfe8;">
       <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:2px;">上長の面談前メモ</div>
       <div style="font-size:12px;color:#333;line-height:1.6;">${managerComment ? managerComment.replace(/\n/g, "<br>") : "（上長のメモはまだ書かれていません）"}</div>
     </div>`;
@@ -1577,7 +1596,7 @@ function loadInterviewView() {
   document.getElementById("appTitle").textContent = "浄美社 面談記録";
   document.getElementById("resultName").textContent = "データを読み込んでいます…";
   document.getElementById("resultMeta").textContent = "";
-  document.getElementById("printBtn").style.display = "";
+  document.getElementById("printBtns").style.display = "flex";
   document.getElementById("resetBtn").style.display = "none";  // 面談画面では本人用の入力画面へ戻らせない
 
   const statusEl = document.getElementById("sendStatus");
